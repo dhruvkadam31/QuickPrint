@@ -1,7 +1,8 @@
-// src/pages/UploadFiles.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+
+const API_URL = "http://localhost:5000/api";
 
 export default function UploadFiles({ user }) {
   const [file, setFile] = useState(null);
@@ -18,10 +19,13 @@ export default function UploadFiles({ user }) {
   const [totalPages, setTotalPages] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [orderData, setOrderData] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [preview, setPreview] = useState(null);
 
-  // Calculate price dynamically based on total pages
+  const PRICE_PER_PAGE = 2;
+
+  // Calculate price dynamically
   useEffect(() => {
-    const PRICE_PER_PAGE = 2; // ₹2 per page
     const calculatedTotalPages = pageCount * quantity;
     setTotalPages(calculatedTotalPages);
     setEstimatedPrice(calculatedTotalPages * PRICE_PER_PAGE);
@@ -29,11 +33,46 @@ export default function UploadFiles({ user }) {
 
   const handleFile = (e) => {
     const selectedFile = e.target.files[0];
+    handleFileSelect(selectedFile);
+  };
+
+  const handleFileSelect = (selectedFile) => {
+    if (!selectedFile) return;
+    
     setFile(selectedFile);
-    // Reset page count when new file is selected
-    if (selectedFile) {
-      setPageCount(0);
-      setTotalPages(0);
+    setPageCount(0);
+    setTotalPages(0);
+    
+    // Create preview for images
+    if (selectedFile.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result);
+      };
+      reader.readAsDataURL(selectedFile);
+    } else {
+      setPreview(null);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
     }
   };
 
@@ -48,10 +87,12 @@ export default function UploadFiles({ user }) {
 
   const initiatePayment = async (orderData) => {
     try {
+      setLoading(true);
+      
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) throw new Error("Razorpay SDK failed to load");
 
-      const initiateResp = await axios.post("http://localhost:5000/initiate-order", {
+      const initiateResp = await axios.post(`${API_URL}/payments/initiate-order`, {
         userId: user.uid,
         vendorId: orderData.vendorId,
         serviceType: orderData.serviceType,
@@ -77,8 +118,7 @@ export default function UploadFiles({ user }) {
         order_id: razorpayOrder.id,
         handler: async function (response) {
           try {
-            setLoading(true);
-            const verifyResp = await axios.post("http://localhost:5000/verify-payment-complete-order", {
+            const verifyResp = await axios.post(`${API_URL}/payments/verify-payment-complete-order`, {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
@@ -86,21 +126,8 @@ export default function UploadFiles({ user }) {
             });
 
             if (verifyResp.data.success) {
-              toast.success("Order created! ID: " + verifyResp.data.orderId);
-              // Reset all form fields
-              setFile(null);
-              setServiceType("");
-              setVendorId("");
-              setQuantity(1);
-              setInstructions("");
-              setColor("B&W");
-              setSides("Single");
-              setOrientation("Portrait");
-              setPageCount(0);
-              setTotalPages(0);
-              setEstimatedPrice(0);
-              setShowConfirmation(false);
-              setOrderData(null);
+              toast.success(`✅ Order created! ID: ${verifyResp.data.orderId}`);
+              resetForm();
             }
           } catch (error) {
             console.error(error);
@@ -109,9 +136,17 @@ export default function UploadFiles({ user }) {
             setLoading(false);
           }
         },
-        prefill: { name: user.displayName || "Customer", email: user.email || "" },
-        theme: { color: "#3399cc" },
-        modal: { ondismiss: () => { toast.info("Payment cancelled"); setLoading(false); } }
+        prefill: { 
+          name: user.displayName || "Customer", 
+          email: user.email || "" 
+        },
+        theme: { color: "#0f172a" },
+        modal: { 
+          ondismiss: () => {
+            toast.info("Payment cancelled");
+            setLoading(false);
+          } 
+        }
       };
 
       const razorpayWindow = new window.Razorpay(options);
@@ -123,8 +158,26 @@ export default function UploadFiles({ user }) {
     }
   };
 
+  const resetForm = () => {
+    setFile(null);
+    setServiceType("");
+    setVendorId("");
+    setQuantity(1);
+    setInstructions("");
+    setColor("B&W");
+    setSides("Single");
+    setOrientation("Portrait");
+    setPageCount(0);
+    setTotalPages(0);
+    setEstimatedPrice(0);
+    setShowConfirmation(false);
+    setOrderData(null);
+    setPreview(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
     if (!file) return toast.error("Choose a file first");
     if (!serviceType) return toast.error("Choose a service type");
     if (!vendorId) return toast.error("Select a vendor");
@@ -135,12 +188,10 @@ export default function UploadFiles({ user }) {
       const fd = new FormData();
       fd.append("file", file);
       
-      toast.info("Uploading and analyzing your document...");
+      toast.info("📄 Uploading and analyzing your document...");
 
-      const convertResp = await axios.post("http://localhost:5000/convert", fd, {
-        headers: { 
-          "Content-Type": "multipart/form-data",
-        }
+      const convertResp = await axios.post(`${API_URL}/convert`, fd, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
       
       if (!convertResp.data.success) {
@@ -150,16 +201,14 @@ export default function UploadFiles({ user }) {
       const { pages, url: fileUrl } = convertResp.data;
 
       setPageCount(pages);
-      toast.success(`File converted successfully! Detected ${pages} pages.`);
+      toast.success(`✅ File processed! Detected ${pages} page${pages > 1 ? 's' : ''}.`);
 
       const calculatedTotalPages = pages * quantity;
-      const PRICE_PER_PAGE = 2;
       const finalPrice = calculatedTotalPages * PRICE_PER_PAGE;
 
       setTotalPages(calculatedTotalPages);
       setEstimatedPrice(finalPrice);
 
-      // Store order data for confirmation
       const orderData = {
         vendorId,
         userId: user.uid,
@@ -177,16 +226,15 @@ export default function UploadFiles({ user }) {
 
       setOrderData(orderData);
       setShowConfirmation(true);
-      setLoading(false);
 
     } catch (err) {
-      toast.error("Upload failed: " + (err?.response?.data?.error || err.message));
+      toast.error("❌ Upload failed: " + (err?.response?.data?.error || err.message));
+    } finally {
       setLoading(false);
     }
   };
 
   const handleConfirmPayment = () => {
-    setLoading(true);
     setShowConfirmation(false);
     initiatePayment(orderData);
   };
@@ -200,144 +248,195 @@ export default function UploadFiles({ user }) {
   return (
     <div className="page-wrapper">
       <div className="card" style={{ maxWidth: 900, margin: "0 auto" }}>
-        <h3>Upload Files</h3>
-        <form onSubmit={handleSubmit} style={{ marginTop: 14 }}>
-          <label className="input-label">Service Type</label>
-          <select className="input" value={serviceType} onChange={e=>setServiceType(e.target.value)} required>
-            <option value="">Select service type</option>
-            <option value="Photo Binding">Photo Binding</option>
-            <option value="Lamination">Lamination</option>
-            <option value="Print">Print</option>
-          </select>
+        <h3>📤 Upload Files</h3>
+        <p className="small-muted">Upload your document and customize print settings</p>
+        
+        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
+          <div className="form-row">
+            <label className="input-label">Service Type</label>
+            <select 
+              className="input" 
+              value={serviceType} 
+              onChange={e => setServiceType(e.target.value)} 
+              required
+            >
+              <option value="">Select service type</option>
+              <option value="Photo Binding">📸 Photo Binding</option>
+              <option value="Lamination">🛡️ Lamination</option>
+              <option value="Print">🖨️ Print</option>
+              <option value="Scan">📱 Scan</option>
+              <option value="Copy">📋 Copy</option>
+            </select>
+          </div>
 
-          <label className="input-label" style={{ marginTop: 12 }}>Select Vendor</label>
-          <select className="input" value={vendorId} onChange={e=>setVendorId(e.target.value)} required>
-            <option value="">Select Vendor</option>
-            <option value="vendor1_id">Vendor 1</option>
-            <option value="vendor2_id">Vendor 2</option>
-          </select>
+          <div className="form-row">
+            <label className="input-label">Select Vendor</label>
+            <select 
+              className="input" 
+              value={vendorId} 
+              onChange={e => setVendorId(e.target.value)} 
+              required
+            >
+              <option value="">Select Vendor</option>
+              <option value="vendor1">Vendor 1 (Downtown)</option>
+              <option value="vendor2">Vendor 2 (Uptown)</option>
+              <option value="vendor3">Vendor 3 (Express)</option>
+            </select>
+          </div>
 
-          {/* File Upload */}
-          <label className="input-label" style={{ marginTop: 12 }}>Upload File</label>
-          <input type="file" onChange={handleFile} required />
+          {/* Drag & Drop File Upload */}
+          <div className="form-row">
+            <label className="input-label">Upload File</label>
+            <div
+              className={`dropzone ${dragActive ? "active" : ""}`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("file-input").click()}
+            >
+              <input
+                id="file-input"
+                type="file"
+                onChange={handleFile}
+                style={{ display: "none" }}
+                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt"
+              />
+              
+              {preview ? (
+                <div>
+                  <img 
+                    src={preview} 
+                    alt="Preview" 
+                    style={{ 
+                      maxWidth: "100%", 
+                      maxHeight: 200, 
+                      objectFit: "contain",
+                      borderRadius: 8
+                    }} 
+                  />
+                  <p style={{ marginTop: 8 }}>{file?.name}</p>
+                </div>
+              ) : file ? (
+                <div>
+                  <div style={{ fontSize: 40 }}>📄</div>
+                  <p><strong>{file.name}</strong></p>
+                  <p className="small-muted">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>📁</div>
+                  <p><strong>Drag & drop your file here</strong></p>
+                  <p className="small-muted">or click to browse</p>
+                  <p className="small-muted" style={{ fontSize: 12 }}>
+                    Supports: PDF, Images, Documents (Max 10MB)
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Display page count information */}
+          {/* Page count info */}
           {pageCount > 0 && (
-            <div style={{ 
-              marginTop: 12, 
-              padding: 12, 
-              backgroundColor: '#e8f5e8', 
-              borderRadius: 6,
-              border: '1px solid #4caf50'
-            }}>
-              <div style={{ fontWeight: 600, color: '#2e7d32', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="info-box success">
+              <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>📄</span>
                 <span>Document Analysis Complete</span>
               </div>
-              <div style={{ marginTop: 8, fontSize: '0.95em' }}>
-                <div>Pages detected in your file: <strong>{pageCount}</strong></div>
-                <div style={{ marginTop: 4, fontSize: '0.9em', color: '#555' }}>
-                  The system automatically counted {pageCount} pages in your document.
+              <div style={{ marginTop: 8 }}>
+                <div>Pages detected: <strong>{pageCount}</strong></div>
+              </div>
+            </div>
+          )}
+
+          <div className="form-row">
+            <label className="input-label">Number of Copies</label>
+            <input 
+              type="number" 
+              className="input" 
+              min="1" 
+              value={quantity} 
+              onChange={e => setQuantity(Number(e.target.value))} 
+            />
+          </div>
+
+          {/* Pricing breakdown */}
+          {pageCount > 0 && (
+            <div className="info-box warning">
+              <div style={{ fontWeight: 700, marginBottom: 12 }}>
+                📊 Print Summary
+              </div>
+              
+              <div className="price-breakdown">
+                <div className="space-between">
+                  <span>Pages per copy:</span>
+                  <strong>{pageCount} pages</strong>
+                </div>
+                <div className="space-between">
+                  <span>Number of copies:</span>
+                  <strong>{quantity}</strong>
+                </div>
+                <hr />
+                <div className="space-between" style={{ fontWeight: 700 }}>
+                  <span>Total pages:</span>
+                  <strong>{totalPages} pages</strong>
+                </div>
+                <div className="space-between" style={{ fontWeight: 700, fontSize: '1.2em' }}>
+                  <span>Total amount:</span>
+                  <span>₹{estimatedPrice}</span>
+                </div>
+                <div className="small-muted">
+                  (₹{PRICE_PER_PAGE} per page × {totalPages} pages)
                 </div>
               </div>
             </div>
           )}
 
-          {/* Quantity + Price */}
-          <label className="input-label" style={{ marginTop: 12 }}>Number of Copies</label>
-          <input 
-            type="number" 
-            className="input" 
-            min="1" 
-            value={quantity} 
-            onChange={e=>setQuantity(Number(e.target.value))} 
-          />
+          <div className="form-row">
+            <label className="input-label">Color</label>
+            <select className="input" value={color} onChange={e => setColor(e.target.value)}>
+              <option value="B&W">⚫ Black & White</option>
+              <option value="Color">🌈 Color</option>
+            </select>
+          </div>
 
-          {/* Display pricing breakdown */}
-          {pageCount > 0 && (
-            <div style={{ 
-              marginTop: 16, 
-              padding: 16, 
-              backgroundColor: '#fff3cd', 
-              borderRadius: 6,
-              border: '1px solid #ffc107'
-            }}>
-              <div style={{ fontWeight: 700, color: '#856404', marginBottom: 12, fontSize: '1.1em' }}>
-                📊 Print Summary
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span>Pages per copy:</span>
-                <strong>{pageCount} pages</strong>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span>Number of copies:</span>
-                <strong>{quantity}</strong>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #ddd' }}>
-                <span>Total pages to print:</span>
-                <strong>{totalPages} pages</strong>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1.1em' }}>
-                <span>Total amount:</span>
-                <span>₹{estimatedPrice}</span>
-              </div>
-              
-              <div style={{ fontSize: '0.85em', color: '#666', marginTop: 6 }}>
-                (₹2 per page × {totalPages} total pages)
-              </div>
-            </div>
-          )}
+          <div className="form-row">
+            <label className="input-label">Sides</label>
+            <select className="input" value={sides} onChange={e => setSides(e.target.value)}>
+              <option value="Single">1️⃣ Single-sided</option>
+              <option value="Double">2️⃣ Double-sided</option>
+            </select>
+          </div>
 
-          <label className="input-label" style={{ marginTop: 12 }}>Color</label>
-          <select className="input" value={color} onChange={e=>setColor(e.target.value)}>
-            <option value="B&W">B&W</option>
-            <option value="Color">Color</option>
-          </select>
+          <div className="form-row">
+            <label className="input-label">Orientation</label>
+            <select className="input" value={orientation} onChange={e => setOrientation(e.target.value)}>
+              <option value="Portrait">📱 Portrait</option>
+              <option value="Landscape">🖥️ Landscape</option>
+            </select>
+          </div>
 
-          <label className="input-label" style={{ marginTop: 12 }}>Sides</label>
-          <select className="input" value={sides} onChange={e=>setSides(e.target.value)}>
-            <option value="Single">Single</option>
-            <option value="Double">Double</option>
-          </select>
+          <div className="form-row">
+            <label className="input-label">Instructions (Optional)</label>
+            <textarea 
+              className="input" 
+              value={instructions} 
+              onChange={e => setInstructions(e.target.value)} 
+              rows={3} 
+              placeholder="e.g., glossy finish, spiral binding, specific page ranges..."
+            />
+          </div>
 
-          <label className="input-label" style={{ marginTop: 12 }}>Orientation</label>
-          <select className="input" value={orientation} onChange={e=>setOrientation(e.target.value)}>
-            <option value="Portrait">Portrait</option>
-            <option value="Landscape">Landscape</option>
-          </select>
-
-          <label className="input-label" style={{ marginTop: 12 }}>Instructions (Optional)</label>
-          <textarea 
-            className="input" 
-            value={instructions} 
-            onChange={e=>setInstructions(e.target.value)} 
-            rows={3} 
-            placeholder="e.g., glossy finish, specific page ranges, binding preferences" 
-          />
-
-          {/* Always show the amount to pay */}
-          <div style={{ 
-            marginTop: 16, 
-            padding: 12, 
-            backgroundColor: '#e3f2fd', 
-            borderRadius: 6,
-            border: '1px solid #2196f3',
-            fontWeight: 700,
-            fontSize: '1.1em',
-            textAlign: 'center'
-          }}>
+          <div className="total-amount">
             Amount to Pay: ₹{estimatedPrice}
           </div>
 
           <button 
             type="submit" 
             className="btn-primary" 
-            
-            style={{ marginTop: 16, width: '100%' }}
+            disabled={loading || pageCount === 0}
           >
             {loading ? "Processing..." : `Proceed to Payment - ₹${estimatedPrice}`}
           </button>
@@ -346,133 +445,57 @@ export default function UploadFiles({ user }) {
 
       {/* Confirmation Modal */}
       {showConfirmation && orderData && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: 24,
-            borderRadius: 12,
-            maxWidth: 500,
-            width: '90%',
-            maxHeight: '90vh',
-            overflow: 'auto'
-          }}>
-            <h3 style={{ marginBottom: 20, color: '#333', textAlign: 'center' }}>
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3 style={{ marginBottom: 20, textAlign: 'center' }}>
               📋 Confirm Your Order
             </h3>
             
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ 
-                backgroundColor: '#f8f9fa', 
-                padding: 16, 
-                borderRadius: 8,
-                border: '1px solid #dee2e6'
-              }}>
-                <h4 style={{ marginBottom: 12, color: '#495057' }}>Order Summary</h4>
-                
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Service Type:</span>
+            <div className="modal-content">
+              <div className="summary-box">
+                <h4>Order Summary</h4>
+                <div className="summary-grid">
+                  <div className="space-between">
+                    <span>Service:</span>
                     <strong>{orderData.serviceType}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>File Pages:</span>
-                    <strong>{orderData.pageCount} pages</strong>
+                  <div className="space-between">
+                    <span>Pages:</span>
+                    <strong>{orderData.pageCount}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Copies:</span>
+                  <div className="space-between">
+                    <span>Copies:</span>
                     <strong>{orderData.quantity}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Total Pages:</span>
-                    <strong>{orderData.totalPages} pages</strong>
+                  <div className="space-between">
+                    <span>Total pages:</span>
+                    <strong>{orderData.totalPages}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Color:</span>
+                  <div className="space-between">
+                    <span>Color:</span>
                     <strong>{orderData.color}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Sides:</span>
+                  <div className="space-between">
+                    <span>Sides:</span>
                     <strong>{orderData.sides}</strong>
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#6c757d' }}>Orientation:</span>
-                    <strong>{orderData.orientation}</strong>
-                  </div>
-                  
-                  {orderData.instructions && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <span style={{ color: '#6c757d' }}>Instructions:</span>
-                      <strong style={{ textAlign: 'right', maxWidth: '60%' }}>{orderData.instructions}</strong>
-                    </div>
-                  )}
                 </div>
               </div>
               
-              <div style={{ 
-                backgroundColor: '#fff3cd', 
-                padding: 16, 
-                borderRadius: 8,
-                border: '1px solid #ffc107',
-                marginTop: 16
-              }}>
-                <h4 style={{ marginBottom: 12, color: '#856404' }}>Payment Summary</h4>
-                
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Pages per copy:</span>
-                    <span>{orderData.pageCount} × ₹2</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Number of copies:</span>
-                    <span>× {orderData.quantity}</span>
-                  </div>
-                  
-                  <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ddd' }} />
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1em', fontWeight: 700 }}>
-                    <span>Total Amount:</span>
-                    <span>₹{orderData.estimatedPrice}</span>
-                  </div>
+              <div className="payment-box">
+                <h4>Payment Summary</h4>
+                <div className="space-between" style={{ fontSize: '1.2em', fontWeight: 700 }}>
+                  <span>Total:</span>
+                  <span>₹{orderData.estimatedPrice}</span>
                 </div>
               </div>
             </div>
             
-            <div style={{ 
-              display: 'flex', 
-              gap: 12,
-              justifyContent: 'center'
-            }}>
+            <div className="modal-actions">
               <button
                 onClick={handleCancelPayment}
                 disabled={loading}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontSize: '1em',
-                  flex: 1
-                }}
+                className="btn-secondary"
               >
                 Cancel
               </button>
@@ -480,33 +503,14 @@ export default function UploadFiles({ user }) {
               <button
                 onClick={handleConfirmPayment}
                 disabled={loading}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontSize: '1em',
-                  fontWeight: 600,
-                  flex: 1
-                }}
+                className="btn-primary"
               >
-                {loading ? 'Processing...' : `Confirm & Pay ₹${orderData.estimatedPrice}`}
+                {loading ? 'Processing...' : `Pay ₹${orderData.estimatedPrice}`}
               </button>
             </div>
             
-            <div style={{ 
-              marginTop: 16, 
-              padding: 12, 
-              backgroundColor: '#e7f3ff', 
-              borderRadius: 6,
-              border: '1px solid #b3d9ff',
-              fontSize: '0.9em',
-              color: '#0066cc',
-              textAlign: 'center'
-            }}>
-              🔒 Your payment is secure and encrypted
+            <div className="secure-badge">
+              🔒 Secure & Encrypted Payment
             </div>
           </div>
         </div>

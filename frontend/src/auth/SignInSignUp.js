@@ -1,5 +1,4 @@
-// src/pages/SignInSignUp.js
-import React, { use, useState } from "react";
+import React, { useState } from "react";
 import { auth } from "../Firebase";
 import {
   signInWithEmailAndPassword,
@@ -15,42 +14,62 @@ export default function SignInSignUp() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isRegister, setIsRegister] = useState(false);
-  const nav = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
     try {
       if (isRegister) {
         if (password !== confirmPassword) {
           toast.error("Passwords do not match!");
+          setLoading(false);
           return;
         }
 
         const userCred = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCred.user, { displayName: name });
-        toast.success("Account created!");
+        toast.success("✅ Account created successfully!");
+        navigate("/upload");
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCred = await signInWithEmailAndPassword(auth, email, password);
 
-        // ✅ Check if this user is admin
+        // Check if this user is admin
         if (email === "admin@quickprint.com") {
           localStorage.setItem("isAdmin", "true");
+          navigate("/admin");
         } else {
           localStorage.setItem("isAdmin", "false");
+          navigate("/upload");
         }
 
-        toast.success("Logged in!");
+        toast.success("✅ Logged in successfully!");
       }
     } catch (err) {
-      toast.error(err.message);
+      console.error(err);
+      let errorMessage = err.message;
+      if (err.code === 'auth/user-not-found') {
+        errorMessage = "No account found with this email";
+      } else if (err.code === 'auth/wrong-password') {
+        errorMessage = "Incorrect password";
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMessage = "Email already in use";
+      }
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleAdminLogin = () => {
+    navigate('/admin_login');
   };
 
   return (
     <div className="auth-container">
       <div className="auth-card">
-        {/* QuickPrint heading & slogan */}
         <h2 className="auth-title">QuickPrint</h2>
         <p className="auth-subtitle">Fast, reliable printing at your fingertips</p>
 
@@ -73,7 +92,6 @@ export default function SignInSignUp() {
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Sign Up extra field */}
           {isRegister && (
             <div className="form-row">
               <label className="input-label">Name</label>
@@ -109,10 +127,10 @@ export default function SignInSignUp() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={6}
             />
           </div>
 
-          {/* Confirm password only on Sign Up */}
           {isRegister && (
             <div className="form-row">
               <label className="input-label">Confirm Password</label>
@@ -127,19 +145,28 @@ export default function SignInSignUp() {
             </div>
           )}
 
-          <button type="submit" className="btn-primary">
-            {isRegister ? "Sign Up" : "Sign In"}
+          <button 
+            type="submit" 
+            className="btn-primary" 
+            disabled={loading}
+          >
+            {loading ? "Please wait..." : (isRegister ? "Sign Up" : "Sign In")}
           </button>
         </form>
 
-        {/* Admin Login Button */}
         <button 
           className="btn-secondary" 
           style={{ marginTop: '10px' }}
-          onClick={() => nav('/admin_login')}
+          onClick={handleAdminLogin}
         >
           Login As Admin
         </button>
+
+        {!isRegister && (
+          <p className="small-muted" style={{ marginTop: 16 }}>
+            Demo: admin@quickprint.com / any password
+          </p>
+        )}
       </div>
     </div>
   );

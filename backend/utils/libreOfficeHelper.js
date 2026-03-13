@@ -1,3 +1,8 @@
+const path = require("path");
+const fs = require("fs");
+const util = require("util");
+const exec = util.promisify(require("child_process").exec);
+
 async function convertWithLibreOffice(inputPath, outputPath) {
   const convertedDir = path.dirname(outputPath);
   
@@ -18,7 +23,7 @@ async function convertWithLibreOffice(inputPath, outputPath) {
       
       console.log("🔧 Executing command:", command);
       
-      const { stdout, stderr } = await execAsync(command, { timeout: 60000 }); // 60 second timeout
+      const { stdout, stderr } = await exec(command, { timeout: 60000 });
       
       if (stdout) console.log("✅ LibreOffice stdout:", stdout);
       if (stderr) console.log("⚠️ LibreOffice stderr:", stderr);

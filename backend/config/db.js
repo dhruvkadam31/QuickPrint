@@ -11,6 +11,7 @@ async function connectToMongoDB() {
   ordersCollection = db.collection("orders");
 
   console.log("✅ Connected to MongoDB");
+  return { db, ordersCollection };
 }
 
 function getOrdersCollection() {
