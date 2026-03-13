@@ -13,6 +13,14 @@ const docxConverter = require("docx-pdf");
 const pptx2pdf = require("pptx2pdf");
 const fs = require("fs");
 
+const paymentRoutes = require("./routes/paymentRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
+
+app.use("/api/payments", paymentRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/upload", uploadRoutes);
+
 dotenv.config();
 
 const app = express();
@@ -28,41 +36,18 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Serve converted PDFs so client can download them
 app.use("/files", express.static(path.join(__dirname, "converted")));
 
-const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-const upload = multer({ storage });
+const upload = require("./middleware/uploadMiddleware");
 
 // ----------------------
 // Razorpay Configuration
 // ----------------------
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const razorpay = require("./services/razorpayService");
 
 // ----------------------
 // MongoDB Connection
 // ----------------------
-let db;
-let ordersCollection;
 
-const connectToMongoDB = async () => {
-  try {
-    const client = new MongoClient(process.env.MONGODB_URI || "mongodb://localhost:27017");
-    await client.connect();
-    console.log("✅ Connected to MongoDB");
-    
-    db = client.db("printing_service");
-    ordersCollection = db.collection("orders");
-  } catch (err) {
-    console.error("❌ MongoDB connection error:", err);
-    process.exit(1);
-  }
-};
+const { connectToMongoDB } = require("./config/db");
 
 // ----------------------
 // Temporary Order Storage (in-memory for demo, use Redis in production)
@@ -345,53 +330,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 // LibreOffice conversion helper function
-async function convertWithLibreOffice(inputPath, outputPath) {
-  const convertedDir = path.dirname(outputPath);
-  
-  const libreOfficePaths = [
-    '"C:\\Program Files\\LibreOffice\\program\\soffice.exe"',
-    '"C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe"',
-    'soffice',
-    'libreoffice',
-  ];
-
-  let lastError = null;
-
-  for (const librePath of libreOfficePaths) {
-    try {
-      console.log(`🔄 Trying LibreOffice path: ${librePath}`);
-      
-      const command = `${librePath} --headless --convert-to pdf --outdir "${convertedDir}" "${inputPath}"`;
-      
-      console.log("🔧 Executing command:", command);
-      
-      const { stdout, stderr } = await execAsync(command, { timeout: 60000 }); // 60 second timeout
-      
-      if (stdout) console.log("✅ LibreOffice stdout:", stdout);
-      if (stderr) console.log("⚠️ LibreOffice stderr:", stderr);
-      
-      // Check if conversion was successful
-      const baseName = path.basename(inputPath, path.extname(inputPath));
-      const expectedOutput = path.join(convertedDir, `${baseName}.pdf`);
-      
-      if (fs.existsSync(expectedOutput)) {
-        // Rename to our desired output filename
-        fs.renameSync(expectedOutput, outputPath);
-        console.log("✅ Document converted successfully with LibreOffice");
-        return { success: true, method: librePath };
-      } else {
-        console.log(`❌ Expected output not found: ${expectedOutput}`);
-        lastError = new Error(`Conversion completed but output file not found`);
-      }
-    } catch (error) {
-      console.log(`❌ LibreOffice path failed: ${librePath}`, error.message);
-      lastError = error;
-      continue;
-    }
-  }
-  
-  throw lastError || new Error('All LibreOffice paths failed');
-}
+const convertWithLibreOffice = require("./utils/libreOfficeHelper");
 
 // ✅ Convert endpoint with LibreOffice only
 app.post("/convert", upload.single("file"), async (req, res) => {
