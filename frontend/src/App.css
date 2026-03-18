@@ -1,0 +1,180 @@
+/* App.css - global styles and auth card look */
+
+/* Page background & font */
+body, html, #root {
+  height: 100%;
+  margin: 0;
+  font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f5f6f8;
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* NAV */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(16,24,40,0.06);
+}
+.nav-left { display:flex; align-items:center; gap:12px; }
+.logo {
+  font-weight:700;
+  color:#0F172A; /* dark indigo */
+  font-size:20px;
+}
+.nav-actions { display:flex; gap:14px; align-items:center; }
+.nav-actions a, .nav-actions button {
+  text-decoration:none;
+  color:#111827;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  padding:8px 12px;
+  border-radius:8px;
+}
+.nav-actions a:hover, .nav-actions button:hover { background: #f3f4f6; }
+
+/* center card container (Sign In / Sign Up) */
+.auth-container {
+  min-height: calc(100vh - 0px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+}
+.auth-card {
+  width: 420px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.08);
+  padding: 28px;
+}
+.auth-title {
+  text-align:center;
+  font-size:20px;
+  font-weight:700;
+  color:#0f172a;
+}
+.auth-subtitle {
+  text-align:center;
+  color:#6b7280;
+  margin-top:6px;
+  margin-bottom:18px;
+  font-size:13px;
+}
+
+/* tabs */
+.tabs {
+  display:flex;
+  gap:8px;
+  background:#f3f4f6;
+  border-radius:9999px;
+  padding:6px;
+  margin-bottom:18px;
+}
+.tab-btn {
+  flex:1;
+  padding:10px 14px;
+  border-radius:9999px;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  font-weight:600;
+  color:#374151;
+}
+.tab-btn.active {
+  background:#fff;
+  box-shadow: 0 3px 10px rgba(2,6,23,0.06);
+}
+
+/* forms */
+.form-row { margin-bottom:12px; display:flex; flex-direction:column; gap:6px; }
+label.input-label { font-size:13px; color:#374151; font-weight:600; }
+.input {
+  padding:12px 14px;
+  border-radius:10px;
+  border:1px solid #e6e7ea;
+  background:#f8fafc;
+  outline:none;
+  font-size:14px;
+}
+.input:focus { border-color:#111827; background:#fff; box-shadow: 0 0 0 4px rgba(99,102,241,0.06); }
+
+/* primary / secondary buttons */
+.btn-primary {
+  width:100%;
+  background: #0b1220; /* deep navy */
+  color:#fff;
+  padding:12px 14px;
+  border-radius:10px;
+  border:none;
+  font-weight:700;
+  cursor:pointer;
+  margin-top:8px;
+}
+.btn-primary:hover { opacity:0.95; }
+
+.btn-ghost {
+  width:100%;
+  background:#fff;
+  color:#111827;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #e6e7ea;
+  cursor:pointer;
+  margin-top:10px;
+}
+
+/* small text / errors */
+.small-muted { font-size:13px; color:#6b7280; margin-top:10px; text-align:center; }
+.error-text { color:#dc2626; font-size:13px; text-align:center; margin-bottom:8px; }
+
+/* page containers for other pages */
+.page-wrapper { padding:24px; }
+.card { background:#fff; padding:18px; border-radius:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.04); }
+
+/* upload form layout */
+.upload-box {
+  border:2px dashed #e6e7ea;
+  border-radius:10px;
+  padding:28px;
+  text-align:center;
+  color:#6b7280;
+  margin-bottom:14px;
+}
+
+/* queue list */
+.queue-list { display:flex; flex-direction:column; gap:12px; }
+.queue-item { padding:14px; border-radius:10px; border:1px solid #eef0f2; background:#fff; display:flex; justify-content:space-between; align-items:center; }
+
+/* orders list */
+.orders-list { display:flex; flex-direction:column; gap:12px; }
+.order-item { padding:14px; border-radius:10px; border:1px solid #eef0f2; background:#fff; }
+
+/* utility */
+.row { display:flex; gap:12px; align-items:center; }
+.space-between { display:flex; justify-content:space-between; align-items:center; }
+/* Ensure your buttons override toastify defaults */
+button, .btn-primary, .btn-ghost {
+  font-family: inherit !important;
+  font-size: 14px !important;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-secondary:hover {
+  background-color: #f0f0f0;
+}

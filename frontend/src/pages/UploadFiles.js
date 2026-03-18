@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 export default function UploadFiles({ user }) {
   const [file, setFile] = useState(null);
   const [serviceType, setServiceType] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [vendors, setVendors] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState("");
   const [color, setColor] = useState("B&W");
@@ -18,6 +20,29 @@ export default function UploadFiles({ user }) {
   const [totalPages, setTotalPages] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [orderData, setOrderData] = useState(null);
+  const [showVendors, setShowVendors] = useState(false);
+  
+  const navigate = useNavigate();
+
+  // Fetch available vendors with auto-refresh
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const res = await axios.get("http://localhost:5000/vendors");
+        if (res.data.success) {
+          setVendors(res.data.vendors);
+        }
+      } catch (err) {
+        console.error("Error fetching vendors:", err);
+        toast.error("Failed to load vendors");
+      }
+    };
+
+    fetchVendors();
+    // Refresh vendors every 30 seconds to get real-time shop status
+    const interval = setInterval(fetchVendors, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Calculate price dynamically based on total pages
   useEffect(() => {
@@ -64,6 +89,8 @@ export default function UploadFiles({ user }) {
         estimatedPrice: orderData.estimatedPrice,
         pageCount: orderData.pageCount,
         totalPages: orderData.totalPages,
+        commission: orderData.commission,
+        vendorEarnings: orderData.vendorEarnings,
       });
 
       const { razorpayOrder, tempOrderId, key } = initiateResp.data;
@@ -86,8 +113,30 @@ export default function UploadFiles({ user }) {
             });
 
             if (verifyResp.data.success) {
-              toast.success("Order created! ID: " + verifyResp.data.orderId);
-              // Reset all form fields
+              const selectedVendor = vendors.find(v => v.vendorId === orderData.vendorId);
+              
+              // Enhanced success message with queue info
+              toast.success(
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px' }}>
+                    🎉 Order Created Successfully!
+                  </div>
+                  <div style={{ marginBottom: '4px' }}>📋 Order ID: {verifyResp.data.orderId}</div>
+                  <div style={{ marginBottom: '4px' }}>🏪 Vendor: {selectedVendor?.name}</div>
+                  <div style={{ marginBottom: '4px', fontWeight: 'bold', color: '#007bff' }}>
+                    📊 Queue Position: #{verifyResp.data.queuePosition}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    Track real-time progress in "My Orders"
+                  </div>
+                </div>,
+                { 
+                  autoClose: 8000,
+                  closeButton: true
+                }
+              );
+              
+              // Reset form
               setFile(null);
               setServiceType("");
               setVendorId("");
@@ -101,6 +150,11 @@ export default function UploadFiles({ user }) {
               setEstimatedPrice(0);
               setShowConfirmation(false);
               setOrderData(null);
+              
+              // Auto-navigate to My Orders after delay
+              setTimeout(() => {
+                navigate('/orders');
+              }, 3000);
             }
           } catch (error) {
             console.error(error);
@@ -155,13 +209,22 @@ export default function UploadFiles({ user }) {
       const calculatedTotalPages = pages * quantity;
       const PRICE_PER_PAGE = 2;
       const finalPrice = calculatedTotalPages * PRICE_PER_PAGE;
+      const commission = finalPrice * 0.10; // 10% commission
+      const vendorEarnings = finalPrice - commission; // Vendor gets 90%
 
       setTotalPages(calculatedTotalPages);
       setEstimatedPrice(finalPrice);
 
+      // Get selected vendor details
+      const selectedVendor = vendors.find(v => v.vendorId === vendorId);
+
       // Store order data for confirmation
       const orderData = {
         vendorId,
+        vendorName: selectedVendor?.name,
+        vendorAddress: selectedVendor?.address,
+        vendorQueue: selectedVendor?.currentQueue,
+        estimatedWaitTime: selectedVendor?.estimatedWaitTime,
         userId: user.uid,
         serviceType,
         fileUrl,
@@ -173,6 +236,8 @@ export default function UploadFiles({ user }) {
         estimatedPrice: finalPrice,
         pageCount: pages,
         totalPages: calculatedTotalPages,
+        commission: commission,
+        vendorEarnings: vendorEarnings,
       };
 
       setOrderData(orderData);
@@ -197,10 +262,132 @@ export default function UploadFiles({ user }) {
     toast.info("Payment cancelled. You can modify your order.");
   };
 
+  const getSelectedVendor = () => {
+    return vendors.find(v => v.vendorId === vendorId);
+  };
+
   return (
     <div className="page-wrapper">
       <div className="card" style={{ maxWidth: 900, margin: "0 auto" }}>
         <h3>Upload Files</h3>
+        
+        {/* Show Available Vendors Button */}
+        <div style={{ marginBottom: 20, textAlign: 'center' }}>
+          <button
+            onClick={() => setShowVendors(!showVendors)}
+            className="btn-secondary"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 8, 
+              margin: '0 auto',
+              padding: '10px 20px'
+            }}
+          >
+            {showVendors ? '▲' : '▼'} 
+            {showVendors ? 'Hide Available Print Shops' : 'Show Available Print Shops'}
+            ({vendors.length})
+          </button>
+        </div>
+
+        {/* Vendors Listing Section */}
+        {showVendors && (
+          <div style={{ 
+            marginBottom: 24,
+            padding: 16,
+            backgroundColor: '#f8f9fa',
+            borderRadius: 12,
+            border: '1px solid #e9ecef'
+          }}>
+            <h4 style={{ marginBottom: 16, color: '#495057' }}>🏪 Available Print Shops</h4>
+            
+            {vendors.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>
+                No print shops available at the moment
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {vendors.map(vendor => (
+                  <div 
+                    key={vendor.vendorId}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: 8,
+                      border: '1px solid #dee2e6',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      ...(vendorId === vendor.vendorId && {
+                        borderColor: '#007bff',
+                        backgroundColor: '#f8f9ff'
+                      })
+                    }}
+                    onClick={() => setVendorId(vendor.vendorId)}
+                  >
+                    {/* Vendor Details - Left Side */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                        <h5 style={{ margin: 0, color: '#343a40' }}>{vendor.name}</h5>
+                        <span
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: 12,
+                            fontSize: '0.75em',
+                            fontWeight: 600,
+                            backgroundColor: vendor.shopOpen ? '#d4edda' : '#f8d7da',
+                            color: vendor.shopOpen ? '#155724' : '#721c24'
+                          }}
+                        >
+                          {vendor.shopOpen ? '🟢 OPEN' : '🔴 CLOSED'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'grid', gap: 4, fontSize: '0.9em', color: '#6c757d' }}>
+                        <div>📍 {vendor.address}</div>
+                        <div>📞 {vendor.phone}</div>
+                        <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                          <span>🖨️ Services: {vendor.services.join(', ')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Queue & Wait Time - Right Side */}
+                    <div style={{ textAlign: 'right', minWidth: 120 }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: '0.85em', color: '#6c757d' }}>Current Queue</div>
+                        <div style={{ fontSize: '1.2em', fontWeight: 700, color: '#007bff' }}>
+                          {vendor.currentQueue} orders
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.85em', color: '#6c757d' }}>Wait Time</div>
+                        <div style={{ fontSize: '1em', fontWeight: 600, color: '#28a745' }}>
+                          ~{vendor.estimatedWaitTime} mins
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div style={{ 
+              marginTop: 12, 
+              padding: 12, 
+              backgroundColor: '#e7f3ff', 
+              borderRadius: 6,
+              fontSize: '0.85em',
+              color: '#0066cc',
+              textAlign: 'center'
+            }}>
+              💡 Shop status updates in real-time. Closed shops won't receive new orders.
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} style={{ marginTop: 14 }}>
           <label className="input-label">Service Type</label>
           <select className="input" value={serviceType} onChange={e=>setServiceType(e.target.value)} required>
@@ -210,12 +397,54 @@ export default function UploadFiles({ user }) {
             <option value="Print">Print</option>
           </select>
 
-          <label className="input-label" style={{ marginTop: 12 }}>Select Vendor</label>
+          {/* Vendor Selection with Queue Info */}
+          <label className="input-label" style={{ marginTop: 12 }}>Select Print Shop</label>
           <select className="input" value={vendorId} onChange={e=>setVendorId(e.target.value)} required>
-            <option value="">Select Vendor</option>
-            <option value="vendor1_id">Vendor 1</option>
-            <option value="vendor2_id">Vendor 2</option>
+            <option value="">Choose a print shop...</option>
+            {vendors.map(vendor => (
+              <option key={vendor.vendorId} value={vendor.vendorId}>
+                {vendor.name} - {vendor.currentQueue} in queue • ~{vendor.estimatedWaitTime} mins • 
+                {vendor.shopOpen ? ' 🟢 OPEN' : ' 🔴 CLOSED'}
+              </option>
+            ))}
           </select>
+
+          {/* Vendor Details Card */}
+          {vendorId && (
+            <div style={{ 
+              marginTop: 12, 
+              padding: 12, 
+              backgroundColor: '#e8f5e8', 
+              borderRadius: 6,
+              border: '1px solid #4caf50'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontWeight: 600, color: '#2e7d32' }}>
+                  🏪 {getSelectedVendor()?.name}
+                </div>
+                <span
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 12,
+                    fontSize: '0.75em',
+                    fontWeight: 600,
+                    backgroundColor: getSelectedVendor()?.shopOpen ? '#d4edda' : '#f8d7da',
+                    color: getSelectedVendor()?.shopOpen ? '#155724' : '#721c24'
+                  }}
+                >
+                  {getSelectedVendor()?.shopOpen ? '🟢 OPEN' : '🔴 CLOSED'}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.9em', color: '#555' }}>
+                <div>📍 {getSelectedVendor()?.address}</div>
+                <div>📞 {getSelectedVendor()?.phone}</div>
+                <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                  <span>📊 Current Queue: {getSelectedVendor()?.currentQueue} orders</span>
+                  <span>⏱️ Estimated Wait: ~{getSelectedVendor()?.estimatedWaitTime} minutes</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* File Upload */}
           <label className="input-label" style={{ marginTop: 12 }}>Upload File</label>
@@ -319,27 +548,51 @@ export default function UploadFiles({ user }) {
             placeholder="e.g., glossy finish, specific page ranges, binding preferences" 
           />
 
-          {/* Always show the amount to pay */}
-          <div style={{ 
-            marginTop: 16, 
-            padding: 12, 
-            backgroundColor: '#e3f2fd', 
-            borderRadius: 6,
-            border: '1px solid #2196f3',
-            fontWeight: 700,
-            fontSize: '1.1em',
-            textAlign: 'center'
-          }}>
-            Amount to Pay: ₹{estimatedPrice}
-          </div>
+          {/* Commission & Pricing Breakdown */}
+          {pageCount > 0 && (
+            <div style={{ 
+              marginTop: 16, 
+              padding: 16, 
+              backgroundColor: '#e3f2fd', 
+              borderRadius: 6,
+              border: '1px solid #2196f3'
+            }}>
+              <div style={{ fontWeight: 700, color: '#1976d2', marginBottom: 12, fontSize: '1.1em' }}>
+                💰 Pricing Breakdown
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span>Printing Cost ({totalPages} pages × ₹2):</span>
+                <span>₹{estimatedPrice}</span>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span>Platform Commission (10%):</span>
+                <span>₹{(estimatedPrice * 0.10).toFixed(2)}</span>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #90caf9' }}>
+                <span>Vendor Earnings:</span>
+                <span>₹{(estimatedPrice * 0.90).toFixed(2)}</span>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1.1em' }}>
+                <span>Amount to Pay:</span>
+                <span>₹{estimatedPrice}</span>
+              </div>
+            </div>
+          )}
 
           <button 
             type="submit" 
             className="btn-primary" 
-            
+            disabled={loading || (vendorId && !getSelectedVendor()?.shopOpen)}
             style={{ marginTop: 16, width: '100%' }}
           >
-            {loading ? "Processing..." : `Proceed to Payment - ₹${estimatedPrice}`}
+            {loading ? "Processing..." : 
+             (vendorId && !getSelectedVendor()?.shopOpen) ? 
+             "❌ Shop is Closed - Cannot Place Order" : 
+             `Proceed to Payment - ₹${estimatedPrice}`}
           </button>
         </form>
       </div>
@@ -372,6 +625,36 @@ export default function UploadFiles({ user }) {
             </h3>
             
             <div style={{ marginBottom: 20 }}>
+              {/* Vendor Information */}
+              <div style={{ 
+                backgroundColor: '#d1fae5', 
+                padding: 16, 
+                borderRadius: 8,
+                border: '1px solid #10b981',
+                marginBottom: 16
+              }}>
+                <h4 style={{ marginBottom: 12, color: '#065f46' }}>🏪 Print Shop</h4>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#065f46' }}>Shop Name:</span>
+                    <strong>{orderData.vendorName}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#065f46' }}>Address:</span>
+                    <strong style={{ textAlign: 'right' }}>{orderData.vendorAddress}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#065f46' }}>Current Queue:</span>
+                    <strong>{orderData.vendorQueue} orders</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#065f46' }}>Estimated Wait:</span>
+                    <strong>~{orderData.estimatedWaitTime} minutes</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Details */}
               <div style={{ 
                 backgroundColor: '#f8f9fa', 
                 padding: 16, 
@@ -425,6 +708,7 @@ export default function UploadFiles({ user }) {
                 </div>
               </div>
               
+              {/* Payment Summary */}
               <div style={{ 
                 backgroundColor: '#fff3cd', 
                 padding: 16, 
@@ -443,6 +727,16 @@ export default function UploadFiles({ user }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Number of copies:</span>
                     <span>× {orderData.quantity}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9em', color: '#666' }}>
+                    <span>Platform Commission (10%):</span>
+                    <span>₹{orderData.commission.toFixed(2)}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9em', color: '#666' }}>
+                    <span>Vendor Earnings:</span>
+                    <span>₹{orderData.vendorEarnings.toFixed(2)}</span>
                   </div>
                   
                   <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ddd' }} />
