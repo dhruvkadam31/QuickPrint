@@ -307,168 +307,9 @@ export default function VendorDashboard() {
   };
 
   // Revenue Analytics Components
-  const RevenueCard = () => (
-    <div style={{
-      backgroundColor: 'white',
-      padding: '20px',
-      borderRadius: '12px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      border: '1px solid #e1e5e9',
-      marginBottom: '20px',
-      position: 'relative'
-    }}>
-      <h4 style={{ margin: '0 0 16px 0', color: '#1f2937' }}>💰 Today's Revenue</h4>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#059669' }}>
-            ₹{revenueData.today.net}
-          </div>
-          <div style={{ fontSize: '0.9em', color: '#6b7280', marginTop: '4px' }}>
-            Net Earnings
-          </div>
-        </div>
-        
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '1em', color: '#374151' }}>
-            Total: ₹{revenueData.today.total}
-          </div>
-          <div style={{ fontSize: '0.85em', color: '#ef4444' }}>
-            Commission: ₹{revenueData.today.commission}
-          </div>
-        </div>
-      </div>
+  
 
-      {/* Hover Tooltip */}
-      <div style={{
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        backgroundColor: '#1f2937',
-        color: 'white',
-        padding: '12px',
-        borderRadius: '8px',
-        marginTop: '8px',
-        fontSize: '0.85em',
-        opacity: 0,
-        transition: 'opacity 0.2s',
-        pointerEvents: 'none',
-        zIndex: 1000
-      }} className="revenue-tooltip">
-        <div style={{ fontWeight: '600', marginBottom: '8px' }}>Revenue Breakdown</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span>Total Revenue:</span>
-          <span>₹{revenueData.today.total}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#ef4444' }}>
-          <span>Platform Commission (10%):</span>
-          <span>₹{revenueData.today.commission}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: '#10b981' }}>
-          <span>Your Earnings:</span>
-          <span>₹{revenueData.today.net}</span>
-        </div>
-      </div>
-
-      <style jsx>{`
-        .revenue-card:hover .revenue-tooltip {
-          opacity: 1;
-        }
-      `}</style>
-    </div>
-  );
-
-  const WeeklyRevenueChart = () => {
-    const maxRevenue = Math.max(...revenueData.weekly.map(day => day.total), 100);
-    
-    return (
-      <div style={{
-        backgroundColor: 'white',
-        padding: '20px',
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        border: '1px solid #e1e5e9'
-      }}>
-        <h4 style={{ margin: '0 0 20px 0', color: '#1f2937' }}>📈 Weekly Revenue Trend</h4>
-        
-        <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', height: '120px', gap: '8px' }}>
-          {revenueData.weekly.map((day, index) => {
-            const height = (day.total / maxRevenue) * 80;
-            const isToday = index === revenueData.weekly.length - 1;
-            
-            return (
-              <div key={day.date} style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center',
-                flex: 1 
-              }}>
-                <div style={{ 
-                  width: '100%',
-                  height: `${height}px`,
-                  backgroundColor: isToday ? '#10b981' : '#3b82f6',
-                  borderRadius: '4px 4px 0 0',
-                  position: 'relative',
-                  transition: 'all 0.3s ease'
-                }}>
-                  {/* Hover tooltip */}
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    backgroundColor: '#1f2937',
-                    color: 'white',
-                    padding: '6px 8px',
-                    borderRadius: '4px',
-                    fontSize: '0.75em',
-                    whiteSpace: 'nowrap',
-                    marginBottom: '4px',
-                    opacity: 0,
-                    transition: 'opacity 0.2s',
-                    pointerEvents: 'none'
-                  }} className="bar-tooltip">
-                    <div>Date: {new Date(day.date).toLocaleDateString()}</div>
-                    <div>Total: ₹{day.total}</div>
-                    <div>Net: ₹{day.net}</div>
-                  </div>
-                </div>
-                
-                <div style={{ 
-                  fontSize: '0.75em', 
-                  color: '#6b7280', 
-                  marginTop: '8px',
-                  textAlign: 'center',
-                  fontWeight: isToday ? '600' : '400'
-                }}>
-                  {new Date(day.date).toLocaleDateString('en-US', { 
-                    weekday: 'short',
-                    day: 'numeric'
-                  })}
-                </div>
-                
-                <div style={{ 
-                  fontSize: '0.7em', 
-                  color: '#059669',
-                  marginTop: '4px',
-                  fontWeight: '600'
-                }}>
-                  ₹{day.net}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <style jsx>{`
-          div:hover .bar-tooltip {
-            opacity: 1;
-          }
-        `}</style>
-      </div>
-    );
-  };
+ 
 
   // Add CSS for hover effects
   useEffect(() => {
@@ -505,23 +346,10 @@ export default function VendorDashboard() {
       
       <div className="page-wrapper">
         <div className="card">
-          <h2>Vendor Dashboard - {vendor.name}</h2>
+          <h2>Hello Vendor Dashboard - {vendor.name}</h2>
           
           {/* Revenue Analytics Section */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '1fr 2fr', 
-            gap: '20px', 
-            marginBottom: '24px' 
-          }}>
-            <div className="revenue-card" style={{ position: 'relative' }}>
-              <RevenueCard />
-            </div>
-            <div>
-              <WeeklyRevenueChart />
-            </div>
-          </div>
-
+          
           {/* Shop Status Toggle */}
           <div style={{ marginBottom: 20 }}>
             <button

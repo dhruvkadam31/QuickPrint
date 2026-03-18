@@ -1,4 +1,4 @@
-// src/pages/VendorLogin.js
+// src/VendorLogin.js
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -21,9 +21,9 @@ export default function VendorLogin() {
     setLoading(true);
 
     try {
-      console.log("🔐 Attempting vendor login for:", email);
+      console.log("🔐 Dhruv Attempting vendor login for:", email);
       
-      const response = await axios.post("http://localhost:3000/vendor/login", {
+      const response = await axios.post("http://localhost:5000/vendor/login", {
         email,
         password
       });

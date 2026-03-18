@@ -13,8 +13,8 @@ import MyOrders from "./pages/MyOrders";
 import CustomerCare from "./pages/CustomerCare";
 import AdminLogin from "./pages/AdminLogin";  
 import AdminDashboard from "./pages/AdminDashboard";
-import VendorLogin from "./pages/VendorLogin";
-import VendorDashboard from "./pages/VendorDashboard";
+import VendorLogin from "./VendorLogin";
+import VendorDashboard from "./pages/vendor/VendorDashboardPage";
 
 // Create Vendor Context for global state management
 export const VendorContext = React.createContext();
