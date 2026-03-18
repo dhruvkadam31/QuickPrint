@@ -5,7 +5,7 @@ const revenueController = require('../controllers/revenueController');
 const orderController = require('../controllers/orderController');
 
 // Vendor authentication
-router.post('/vendor/login', vendorController.vendorLogin);
+router.post('/login', vendorController.vendorLogin);
 
 // Vendor management
 router.get('/', vendorController.getAllVendors);
