@@ -7,13 +7,13 @@ import { auth } from "./Firebase";
 import AllOrders from "./pages/AllOrders";
 import NavBar from "./components/NavBar";
 import SignInSignUp from "./pages/SignInSignUp";
-import UploadFiles from "./pages/UploadFiles";
+import UploadFiles from "./pages/customer/UploadFiles";
 import QueueStatus from "./pages/QueueStatus";
-import MyOrders from "./pages/MyOrders";
-import CustomerCare from "./pages/CustomerCare";
+import MyOrders from "./pages/customer/MyOrders";
+import CustomerCare from "./pages/customer/CustomerCare";
 import AdminLogin from "./pages/AdminLogin";  
 import AdminDashboard from "./pages/AdminDashboard";
-import VendorLogin from "./VendorLogin";
+import VendorLogin from "./pages/vendor/VendorLogin";
 import VendorDashboard from "./pages/vendor/VendorDashboardPage";
 
 // Create Vendor Context for global state management
