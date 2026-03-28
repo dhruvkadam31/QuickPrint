@@ -3,6 +3,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const {Server} = require('socket.io');
 
 // Load environment variables
 dotenv.config();
@@ -22,7 +24,65 @@ const fileRoutes = require('./routes/fileRoutes');
 const debugRoutes = require('./routes/debugRoutes');
 
 const app = express();
+const server = http.createServer(app);
 
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  }
+});
+
+io.on("connection", (socket)=> {
+  const socketVendorMap = {};
+  console.log("Client connected:", socket.id);
+  socket.on("vendor-online", async (vendorId) => {
+    console.log("🟢 Vendor online:", vendorId);
+
+  // 🔥 Map socket → vendor
+    socketVendorMap[socket.id] = vendorId;
+
+    try {
+      const { vendorsCollection } = require('./config/database').getCollections();
+
+      await vendorsCollection.updateOne(
+        { vendorId },
+        { $set: { isOnline: true } }
+      );
+
+   } catch (err) {
+      console.error("Error setting vendor online:", err);
+    }
+  });
+  socket.on("disconnect", async () => {
+    const vendorId = socketVendorMap[socket.id];
+
+    console.log("🔴 Socket disconnected:", socket.id);
+
+    if (vendorId) {
+      console.log("🔴 Vendor offline:", vendorId);
+
+      try {
+        const { vendorsCollection } = require('./config/database').getCollections();
+
+        await vendorsCollection.updateOne(
+          { vendorId },
+          { $set: { isOnline: false } }
+        );
+
+      } catch (err) {
+      console.error("Error setting vendor offline:", err);
+      }
+
+      delete socketVendorMap[socket.id];
+    }
+  });
+});
+
+app.use((req, res, next) => {
+  console.log("🌐 Incoming Request:", req.method, req.url);
+  next();
+});
 // Middleware
 app.use(cors({
   origin: "http://localhost:3000",
@@ -80,7 +140,9 @@ const startServer = async () => {
     await connectToMongoDB(); // This now handles vendor initialization internally
     
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+    server.listen(PORT, ()=>{
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
   } catch (err) {
     console.error("❌ Failed to start server:", err);
     process.exit(1);

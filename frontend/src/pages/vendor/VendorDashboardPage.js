@@ -3,6 +3,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import VendorNavbar from '../../components/vendor/VendorNavbar';
 import axios from 'axios';
 import './VendorDashboard.css';
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:5000');
 
 const VendorDashboardPage = () => {
 const vendor = JSON.parse(localStorage.getItem("vendorData"));
@@ -31,8 +34,28 @@ const vendor = JSON.parse(localStorage.getItem("vendorData"));
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [vendor?.vendorId]);
+  const handleBeforeUnload = async () => {
+    const vendor = JSON.parse(localStorage.getItem("vendorData"));
+    const vendorData = JSON.parse(localStorage.getItem("vendorData"));
+
+  if (vendorData?.vendorId) {
+      socket.emit("vendor-online", vendorData.vendorId);
+    }
+    
+    if (vendor) {
+      navigator.sendBeacon(
+        `http://localhost:5000/vendor/${vendor.vendorId}/status`,
+        JSON.stringify({ isOnline: false })
+      );
+    }
+  };
+
+  window.addEventListener("beforeunload", handleBeforeUnload);
+
+  return () => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+  };
+}, []);
 
   const fetchDashboardData = async () => {
     try {

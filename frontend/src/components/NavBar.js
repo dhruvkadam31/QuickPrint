@@ -8,22 +8,43 @@ export default function NavBar({ user }) {
   const navigate = useNavigate();
   const isAdmin = localStorage.getItem("isAdmin") === "true";
   const isVendor = localStorage.getItem("isVendor") === "true";
-  const vendorData = isVendor ? JSON.parse(localStorage.getItem("vendorData")) : null;
+  let vendorData = null;
+
+  try {
+    vendorData = isVendor ? JSON.parse(localStorage.getItem("vendorData")) : null;
+  } catch {
+    vendorData = null;
+  }
 
   console.log("🔍 NavBar Debug:", { isAdmin, isVendor, vendorData, user: user?.email });
 
-  const handleLogout = () => {
-    if (isVendor) {
-      localStorage.removeItem("isVendor");
-      localStorage.removeItem("vendorData");
-      navigate("/vendor_login");
-    } else if (isAdmin) {
+  const handleLogout = async () => {
+  if (isVendor && vendorData) {
+    try {
+      const vendor = vendorData;
+
+      await fetch(`http://localhost:5000/vendor/${vendor.vendorId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isOnline: false })
+      });
+
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+
+    localStorage.removeItem("isVendor");
+    localStorage.removeItem("vendorData");
+    navigate("/vendor_login");
+
+  } else if (isAdmin) {
       localStorage.removeItem("isAdmin");
       navigate("/admin_login");
-    } else {
-      signOut(auth);
+
+  } else {
+      await signOut(auth);
       navigate("/");
-    }
+  }
   };
 
   const getDisplayName = () => {

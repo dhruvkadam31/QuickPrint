@@ -9,11 +9,36 @@ const vendor = JSON.parse(localStorage.getItem("vendorData"));
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const isVendor = localStorage.getItem("isVendor") === "true";
 
-  const handleLogout = () => {
-    logout();
-    navigate('/vendor/login');
-  };
+  const handleLogout = async () => {
+  if (isVendor) {
+    try {
+      const vendor = JSON.parse(localStorage.getItem("vendorData"));
+      console.log(vendorId);
+      await fetch(`http://localhost:5000/vendor/${vendor.vendorId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isOnline: false })
+      });
+
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+
+    localStorage.removeItem("isVendor");
+    localStorage.removeItem("vendorData");
+    navigate("/vendor_login");
+
+  } else if (isAdmin) {
+    localStorage.removeItem("isAdmin");
+    navigate("/admin_login");
+
+  } else {
+    await signOut(auth);
+    navigate("/");
+  }
+};
 
   const navItems = [
     { path: '/vendor/dashboard', label: 'Dashboard', icon: '📊' },

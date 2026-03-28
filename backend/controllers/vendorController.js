@@ -18,10 +18,14 @@ const vendorLogin = async (req, res) => {
     }
 
     await vendorsCollection.updateOne(
-      { vendorId: vendor.vendorId },
-      { $set: { lastLogin: new Date() } }
-    );
-
+  { vendorId: vendor.vendorId },
+  { 
+    $set: { 
+      lastLogin: new Date(),
+      isOnline: true   // 🔥 IMPORTANT
+    } 
+  }
+);
     res.json({
       success: true,
       message: "Login successful",
@@ -42,11 +46,21 @@ const vendorLogin = async (req, res) => {
 
 const getAllVendors = async (req, res) => {
   try {
+
+    console.log("🔥 API HIT: /vendors"); 
+    
     const { vendorsCollection } = getCollections();
     const vendors = await vendorsCollection.find({ 
       isActive: true,
-      shopOpen: true 
+      shopOpen: true ,
+      isOnline: true
     }).toArray();
+
+    vendors.forEach(v => {
+    console.log("👉", v.vendorId, "isOnline:", v.isOnline);
+    });
+
+console.log("📦 Vendors from DB:", vendors);
 
     const vendorsWithQueue = await Promise.all(
       vendors.map(async (vendor) => {
@@ -74,6 +88,27 @@ const getAllVendors = async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching vendors:", err);
     res.status(500).json({ error: "Failed to fetch vendors" });
+  }
+};
+
+const updateVendorStatus = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { isOnline } = req.body;
+
+    console.log("🟡 Updating vendor:", vendorId, "→ isOnline:", isOnline);
+
+    const { vendorsCollection } = getCollections();
+
+    await vendorsCollection.updateOne(
+      { vendorId },
+      { $set: { isOnline } }
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update status" });
   }
 };
 
@@ -140,5 +175,6 @@ module.exports = {
   vendorLogin,
   getAllVendors,
   getVendorById,
-  updateShopStatus
+  updateShopStatus,
+  updateVendorStatus
 };

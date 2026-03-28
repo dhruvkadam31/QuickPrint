@@ -40,7 +40,7 @@ export default function UploadFiles({ user }) {
 
     fetchVendors();
     // Refresh vendors every 30 seconds to get real-time shop status
-    const interval = setInterval(fetchVendors, 30000);
+    const interval = setInterval(fetchVendors, 3000);
     return () => clearInterval(interval);
   }, []);
 

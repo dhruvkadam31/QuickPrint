@@ -11,7 +11,8 @@ router.post('/login', vendorController.vendorLogin);
 router.get('/', vendorController.getAllVendors);
 router.get('/:vendorId', vendorController.getVendorById);
 router.patch('/:vendorId/shop-status', vendorController.updateShopStatus);
-
+router.patch('/:vendorId/status', vendorController.updateShopStatus);
+router.patch('/vendor/:vendorId/status', vendorController.updateVendorStatus);
 // Vendor orders
 router.get('/:vendorId/orders', orderController.getVendorOrders);
 

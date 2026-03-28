@@ -23,7 +23,6 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [vendors, setVendors] = useState([]);
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -38,7 +37,7 @@ export default function App() {
       // Fetch vendors for public access
       const fetchVendors = async () => {
         try {
-          const res = await fetch("http://localhost:5000/vendors");
+          const res = await fetch("http://localhost:5000/vendor");
           const data = await res.json();
           if (data.success) {
             setVendors(data.vendors);
@@ -51,10 +50,27 @@ export default function App() {
     }
   }, [authChecked, user]);
 
-  // Check authentication status
+  let vendorData = null;
+
+  try {
+    vendorData = JSON.parse(localStorage.getItem("vendorData"));
+  } catch {
+    vendorData = null;
+  }
+
   const isAdmin = localStorage.getItem("isAdmin") === "true";
-  const isVendor = localStorage.getItem("isVendor") === "true";
-  const vendorData = localStorage.getItem("vendorData");
+  const isVendor = localStorage.getItem("isVendor") === "true" && vendorData;
+
+  useEffect(() => {
+    if (localStorage.getItem("isVendor") === "true" && !vendorData) {
+      localStorage.removeItem("isVendor");
+      localStorage.removeItem("vendorData");
+    }
+  }, []);
+
+  // Check authentication status
+
+
 
   console.log("🔐 App.js - Authentication State:", {
     user: user?.email,

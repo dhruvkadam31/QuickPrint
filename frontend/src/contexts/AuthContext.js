@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }) => {
   // Vendor login
   const vendorLogin = async (email, password) => {
     try {
-      const response = await axios.post('http://localhost:5000/vendors/login', {
+      const response = await axios.post('http://localhost:5000/vendor/login', {
         email,
         password
       });

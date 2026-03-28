@@ -64,6 +64,9 @@ export default function VendorLogin() {
     }
   };
 
+  
+  
+
   // Quick demo login buttons
   const handleDemoLogin = (vendorNumber) => {
     if (vendorNumber === 1) {

@@ -40,7 +40,7 @@ export default function VendorDashboard() {
   const fetchVendorOrders = async () => {
     try {
       const vendorData = JSON.parse(localStorage.getItem("vendorData"));
-      const res = await axios.get(`http://localhost:5000/vendors/${vendorData.vendorId}/orders`);
+      const res = await axios.get(`http://localhost:5000/vendor/${vendorData.vendorId}/orders`);
       setOrders(res.data);
       console.log("📦 Fetched vendor orders:", res.data);
     } catch (err) {
@@ -51,7 +51,7 @@ export default function VendorDashboard() {
   const fetchRevenueData = async () => {
     try {
       const vendorData = JSON.parse(localStorage.getItem("vendorData"));
-      const res = await axios.get(`http://localhost:5000/vendors/${vendorData.vendorId}/revenue`);
+      const res = await axios.get(`http://localhost:5000/vendor/${vendorData.vendorId}/revenue`);
       setRevenueData(res.data);
     } catch (err) {
       console.error("Fetch revenue error:", err);
@@ -262,7 +262,7 @@ export default function VendorDashboard() {
       const vendorData = JSON.parse(localStorage.getItem("vendorData"));
       const newStatus = !shopOpen;
       
-      const response = await axios.patch(`http://localhost:5000/vendors/${vendorData.vendorId}/shop-status`, {
+      const response = await axios.patch(`http://localhost:5000/vendor/${vendorData.vendorId}/shop-status`, {
         shopOpen: newStatus
       });
       
