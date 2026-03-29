@@ -29,6 +29,9 @@ export default function VendorDashboard() {
   useEffect(() => {
     fetchAll();
 
+    const vendor = JSON.parse(localStorage.getItem("vendorData"));
+    socket.emit("vendor-online", vendor.vendorId);
+
     socket.on("order-created", () => {
       toast("📦 New order received!", { icon: "🔔" });
       fetchAll();

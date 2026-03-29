@@ -62,12 +62,13 @@ export default function Upload() {
   }, [step]);
 
 useEffect(() => {
-  socket.on("vendor-status-change", ({ vendorId, isOnline }) => {
-    setVendors((prev) =>
-      prev.map((v) =>
-        v._id === vendorId ? { ...v, isOnline } : v
-      )
-    );
+  socket.on("vendor-status-change", async () => {
+    try {
+      const res = await getAvailableVendors();
+      setVendors(res.data);
+    } catch {
+      console.log("Failed to refresh vendors");
+    }
   });
 
   return () => socket.off("vendor-status-change");

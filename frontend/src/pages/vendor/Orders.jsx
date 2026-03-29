@@ -24,15 +24,35 @@ export default function VendorOrders() {
     }
   };
 
-  useEffect(() => {
+ useEffect(() => {
+  fetchOrders();
+
+if (Notification.permission === "granted") {
+  new Notification("New Order!", {
+    body: "You have received a new print order",
+  });
+}
+
+
+
+  socket.on("order-created", (data) => {
     fetchOrders();
-    socket.on("order-created", fetchOrders);
-    socket.on("order-updated", fetchOrders);
-    return () => {
-      socket.off("order-created", fetchOrders);
-      socket.off("order-updated", fetchOrders);
-    };
-  }, []);
+
+    // 🔔 Sound
+    const audio = new Audio("/notification.mp3");
+    audio.play();
+
+    // 🔥 Toast
+    toast.success("🆕 New order received!");
+  });
+
+  socket.on("order-updated", fetchOrders);
+
+  return () => {
+    socket.off("order-created");
+    socket.off("order-updated");
+  };
+}, []);
 
   const handleStatus = async (orderId, newStatus) => {
     setUpdating(orderId);
