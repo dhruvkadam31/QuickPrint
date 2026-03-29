@@ -127,7 +127,7 @@ export default function MyOrders() {
                   <div>
                     <div className="text-muted">🏪 {o.vendorName}</div>
                     <div className="text-muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>
-                      #{o.orderId.slice(-8)} · {new Date(o.createdAt).toLocaleDateString()}
+                      #{o.orderCode || o.orderId.slice(-4)} · {new Date(o.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--brand)" }}>₹{o.estimatedPrice}</div>
@@ -138,8 +138,7 @@ export default function MyOrders() {
                   <div style={{ background: "var(--success-light)", border: "1.5px solid var(--success)", borderRadius: 8, padding: 12, marginTop: 12 }}>
                     <div style={{ fontWeight: 700, color: "#065f46", marginBottom: 4 }}>🎉 Ready for pickup!</div>
                     <div style={{ fontSize: "0.85rem", color: "#065f46" }}>
-                      Show your OTP to the vendor. Check your order confirmation.
-                    </div>
+                        Show this OTP: <strong>{o.otp}</strong>                    </div>
                   </div>
                 )}
 

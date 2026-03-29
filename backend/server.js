@@ -38,19 +38,32 @@ app.get("/health", (req, res) => res.json({ status: "OK" }));
 io.on("connection", (socket) => {
   console.log("🔌 Client connected:", socket.id);
 
-  socket.on("vendor-online", (vendorId) => {
-    socket.join(`vendor-${vendorId}`);
+  socket.on("vendor-online", async (vendorId) => {
+    socket.vendorId = vendorId; // store on socket
+
+    await require("./models/Vendor").findByIdAndUpdate(vendorId, {
+      isOnline: true,
+    });
+
     io.emit("vendor-status-change", { vendorId, isOnline: true });
     console.log(`✅ Vendor ${vendorId} is online`);
   });
 
-  socket.on("vendor-offline", (vendorId) => {
-    io.emit("vendor-status-change", { vendorId, isOnline: false });
-    console.log(`❌ Vendor ${vendorId} went offline`);
-  });
-
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     console.log("🔌 Client disconnected:", socket.id);
+
+    if (socket.vendorId) {
+      await require("./models/Vendor").findByIdAndUpdate(socket.vendorId, {
+        isOnline: false,
+      });
+
+      io.emit("vendor-status-change", {
+        vendorId: socket.vendorId,
+        isOnline: false,
+      });
+
+      console.log(`❌ Vendor ${socket.vendorId} went offline`);
+    }
   });
 });
 

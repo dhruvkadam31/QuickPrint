@@ -64,7 +64,7 @@ export default function VendorPickup() {
           </div>
           <div style={{ display: "grid", gap: 8, fontSize: "0.9rem" }}>
             {[
-              ["Order ID", `#${order.orderId.slice(-8)}`],
+              ["Order", `#${order.orderCode || order.orderId.slice(-4)}`],
               ["Service", order.serviceType],
               ["Pages", order.totalPages],
               ["Amount", `₹${order.estimatedPrice}`],

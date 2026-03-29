@@ -82,7 +82,7 @@ export default function VendorOrders() {
         <div key={order.orderId} className="order-item">
           {/* Header */}
           <div className="flex-between mb-8">
-            <span className="fw-700">#{order.orderId.slice(-8)}</span>
+            <span className="fw-700">#{order.orderCode || order.orderId.slice(-4)}</span>
             <span className="text-muted" style={{ fontSize: "0.8rem" }}>
               {new Date(order.createdAt).toLocaleString()}
             </span>
