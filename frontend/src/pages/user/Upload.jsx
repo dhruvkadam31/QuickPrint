@@ -85,40 +85,59 @@ export default function Upload() {
   };
 
   // ── Payment (Razorpay demo) ──
-  const handlePayment = async () => {
-    if (!selectedVendor) return toast.error("Select a vendor first");
-    setPaying(true);
+ const handlePayment = async () => {
+  console.log("RAZORPAY KEY:", import.meta.env.VITE_RAZORPAY_KEY_ID);
+  if (!selectedVendor) return toast.error("Select vendor");
 
-    try {
-      // Demo: skip real Razorpay, simulate paid
-      await new Promise((r) => setTimeout(r, 1200));
-      const paymentId = "demo_pay_" + Date.now();
+  const loaded = await loadRazorpayScript();
+  if (!loaded) return toast.error("Razorpay failed to load");
 
-      const res = await createOrder({
-        userId: user.uid,
-        userName: user.displayName || user.email,
-        vendorId: selectedVendor._id,
-        fileUrl,
-        originalFileName,
-        serviceType,
-        pageCount,
-        quantity,
-        color,
-        sides,
-        orientation,
-        instructions,
-        estimatedPrice,
-        paymentId,
-      });
+  const options = {
+    key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use environment variable
+    amount: estimatedPrice * 100,
+    currency: "INR",
+    name: "QuickPrint",
 
-      setOrderDone(res.data);
-      toast.success("Order placed! 🎉");
-    } catch (err) {
-      toast.error("Order failed: " + (err.response?.data?.error || err.message));
-    } finally {
-      setPaying(false);
+    handler: async function (response) {
+      try {
+        const res = await createOrder({
+          userId: user.uid,
+          userName: user.displayName || user.email,
+          vendorId: selectedVendor._id,
+          fileUrl,
+          originalFileName,
+          serviceType,
+          pageCount,
+          quantity,
+          color,
+          sides,
+          orientation,
+          instructions,
+          estimatedPrice,
+          paymentId: response.razorpay_payment_id,
+        });
+
+        setOrderDone(res.data);
+        toast.success("Order placed 🎉");
+
+      } catch (err) {
+        toast.error("Order failed");
+      }
     }
   };
+
+  const rzp = new window.Razorpay(options);
+  rzp.open();
+};
+
+const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
 
   // ── Render ──
   if (orderDone) {
