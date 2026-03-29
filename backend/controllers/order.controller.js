@@ -27,6 +27,7 @@ exports.uploadFile = async (req, res) => {
 // POST /orders/create
 exports.createOrder = async (req, res) => {
   try {
+    console.log(req.body);
     const {
       userId,
       userName,
@@ -51,6 +52,7 @@ exports.createOrder = async (req, res) => {
     const commission = +(estimatedPrice * 0.1).toFixed(2);
     const vendorEarnings = +(estimatedPrice * 0.9).toFixed(2);
     const otp = generateOTP();
+    const orderCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
     const order = await Order.create({
       userId,
@@ -74,6 +76,7 @@ exports.createOrder = async (req, res) => {
       paymentStatus: paymentId ? "paid" : "pending",
       otp,
       status: "Queued",
+      orderCode,
     });
 
     // Emit to vendor room

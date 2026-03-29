@@ -9,6 +9,11 @@ const orderSchema = new mongoose.Schema(
       unique: true,
     },
 
+    orderCode: {
+      type: String,
+      unique: true
+    },
+
     // User (Firebase UID)
     userId: { type: String, required: true },
     userName: { type: String },
