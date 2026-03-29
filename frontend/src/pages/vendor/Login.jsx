@@ -13,19 +13,20 @@ export default function VendorLogin() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const res = await vendorLogin({ email, password });
-      const { token, vendor } = res.data;
+    try {const res = await vendorLogin({ email, password });
+const { token, vendor } = res.data;
 
-      localStorage.setItem("vendorToken", token);
-      localStorage.setItem("vendorData", JSON.stringify(vendor));
+if (!vendor?.vendorId) {
+  throw new Error("Invalid vendor data");
+}
 
-      // Announce online via socket
-      socket.emit("vendor-online", vendor.vendorId);
+localStorage.setItem("vendorToken", token);
+localStorage.setItem("vendorData", JSON.stringify(vendor));
 
-      toast.success(`Welcome, ${vendor.name}! 🏪`);
-      navigate("/vendor/dashboard");
-    } catch (err) {
+socket.emit("vendor-online", vendor.vendorId);
+
+toast.success(`Welcome, ${vendor.name}! 🏪`);
+navigate("/vendor/dashboard");} catch (err) {
       toast.error(err.response?.data?.error || "Login failed");
     } finally {
       setLoading(false);
