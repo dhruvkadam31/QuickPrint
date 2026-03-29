@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../contexts/AuthContext";
 import { uploadFile, getAvailableVendors, createOrder } from "../../services/api";
 import UserNavbar from "../../components/user/UserNavbar";
+import socket from "../../services/socket";
 
 const STEPS = ["Upload File", "Configure", "Select Vendor", "Payment"];
 
@@ -60,6 +61,18 @@ export default function Upload() {
     }
   }, [step]);
 
+useEffect(() => {
+  socket.on("vendor-status-change", ({ vendorId, isOnline }) => {
+    setVendors((prev) =>
+      prev.map((v) =>
+        v._id === vendorId ? { ...v, isOnline } : v
+      )
+    );
+  });
+
+  return () => socket.off("vendor-status-change");
+}, []);
+
   // ── File handling ──
   const handleFileChange = (f) => {
     if (!f) return;
@@ -86,6 +99,16 @@ export default function Upload() {
 
   // ── Payment (Razorpay demo) ──
  const handlePayment = async () => {
+  // 🔥 NEW CHECK
+const vendorStillOnline = vendors.find(
+  (v) => v._id === selectedVendor._id
+);
+
+if (!vendorStillOnline?.isOnline || !vendorStillOnline?.shopOpen) {
+  toast.error("Vendor is no longer available");
+  setStep(2); // go back to vendor selection
+  return;
+}
   console.log("RAZORPAY KEY:", import.meta.env.VITE_RAZORPAY_KEY_ID);
   if (!selectedVendor) return toast.error("Select vendor");
 
