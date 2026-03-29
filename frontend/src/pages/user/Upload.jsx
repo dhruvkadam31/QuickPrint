@@ -331,52 +331,74 @@ const loadRazorpayScript = () =>
 
         {/* STEP 2: Select Vendor */}
         {step === 2 && (
-          <div className="card">
-            <h3 style={{ marginBottom: 4 }}>Available Vendors</h3>
-            <p className="text-muted" style={{ marginBottom: 16 }}>Only showing online & open shops</p>
+  <div className="card">
+    
+    {/* Header + Refresh */}
+    <div className="flex-between" style={{ marginBottom: 4 }}>
+      <h3>Available Vendors</h3>
+      <button
+        className="btn btn-gray"
+        style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+        onClick={async () => {
+          setLoadingVendors(true);
+          try {
+            const res = await getAvailableVendors();
+            setVendors(res.data);
+            toast.success("Vendors refreshed 🔄");
+          } catch {
+            toast.error("Failed to refresh vendors");
+          } finally {
+            setLoadingVendors(false);
+          }
+        }}
+      >
+        🔄 Refresh
+      </button>
+    </div>
 
-            {loadingVendors && <p className="text-muted text-center">Loading vendors...</p>}
-            {!loadingVendors && vendors.length === 0 && (
-              <div style={{ textAlign: "center", padding: 40 }}>
-                <div style={{ fontSize: "2rem", marginBottom: 8 }}>😔</div>
-                <p>No vendors available right now. Try again later.</p>
-              </div>
-            )}
+    <p className="text-muted" style={{ marginBottom: 16 }}>
+      Only showing online & open shops
+    </p>
 
-            {vendors.map((v) => (
-              <div
-                key={v._id}
-                className="order-item"
-                onClick={() => setSelectedVendor(v)}
-                style={{
-                  cursor: "pointer",
-                  borderColor: selectedVendor?._id === v._id ? "var(--brand)" : "var(--gray-200)",
-                  background: selectedVendor?._id === v._id ? "var(--brand-light)" : "white",
-                }}
-              >
-                <div className="flex-between">
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{v.shopName}</div>
-                    <div className="text-muted">{v.name}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: "0.8rem", color: "var(--success)", fontWeight: 600 }}>● Open</div>
-                    <div className="text-muted" style={{ fontSize: "0.8rem" }}>
-                      B&W ₹{v.bwPricePerPage}/pg · Color ₹{v.colorPricePerPage}/pg
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+    {loadingVendors && <p>Loading vendors...</p>}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button className="btn btn-gray" onClick={() => setStep(1)}>← Back</button>
-              <button className="btn btn-primary" style={{ flex: 1 }} disabled={!selectedVendor} onClick={() => setStep(3)}>
-                Proceed to Payment →
-              </button>
-            </div>
-          </div>
-        )}
+    {!loadingVendors && vendors.length === 0 && (
+      <p>No vendors available</p>
+    )}
+
+    {vendors.map((v) => (
+      <div
+        key={v._id}
+        className="order-item"
+        onClick={() => setSelectedVendor(v)}
+        style={{
+          cursor: "pointer",
+          borderColor:
+            selectedVendor?._id === v._id
+              ? "var(--brand)"
+              : "var(--gray-200)",
+        }}
+      >
+        <div>{v.shopName}</div>
+        <div>{v.name}</div>
+      </div>
+    ))}
+
+    <div style={{ marginTop: 16 }}>
+      <button className="btn btn-gray" onClick={() => setStep(1)}>
+        ← Back
+      </button>
+      <button
+        className="btn btn-primary"
+        disabled={!selectedVendor}
+        onClick={() => setStep(3)}
+      >
+        Proceed →
+      </button>
+    </div>
+
+  </div>
+)}
 
         {/* STEP 3: Payment */}
         {step === 3 && (
