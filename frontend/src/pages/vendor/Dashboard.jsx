@@ -33,6 +33,7 @@ export default function VendorDashboard() {
     socket.emit("vendor-online", vendor.vendorId);
 
     socket.on("order-created", () => {
+      console.log("ORDER CREATED EVENT RECEIVED");
       toast("📦 New order received!", { icon: "🔔" });
       fetchAll();
     });
@@ -65,6 +66,20 @@ export default function VendorDashboard() {
 
   return (
     <VendorLayout>
+
+<button
+  onClick={async () => {
+    await Notification.requestPermission();
+
+    const audio = new Audio("/notification.mp3");
+    audio.play().catch(() => {});
+
+    toast.success("Notifications enabled 🔔");
+  }}
+>
+  Enable Alerts
+</button>
+
       <div className="flex-between mb-16">
         <div>
           <h2 style={{ marginBottom: 2 }}>Dashboard</h2>

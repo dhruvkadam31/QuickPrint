@@ -11,7 +11,7 @@ const orderSchema = new mongoose.Schema(
 
     orderCode: {
       type: String,
-      unique: true
+      unique: true,
     },
 
     // User (Firebase UID)
@@ -39,6 +39,17 @@ const orderSchema = new mongoose.Schema(
     sides: { type: String, enum: ["Single", "Double"], default: "Single" },
     orientation: { type: String, enum: ["Portrait", "Landscape"], default: "Portrait" },
     instructions: { type: String, default: "" },
+
+    // 🔥 Structured print config (for vendor display)
+    printConfig: {
+      pageOption: { type: String, enum: ["All", "Custom"], default: "All" },
+      customPages: { type: String, default: "" },   // e.g. "1,3,5-8"
+      pagesPerSheet: { type: Number, default: 1 },
+      copies: { type: Number, default: 1 },
+      color: { type: String, default: "B&W" },
+      sides: { type: String, default: "Single" },
+      orientation: { type: String, default: "Portrait" },
+    },
 
     // Pricing
     estimatedPrice: { type: Number, required: true },

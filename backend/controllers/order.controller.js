@@ -43,6 +43,7 @@ exports.createOrder = async (req, res) => {
       instructions,
       estimatedPrice,
       paymentId,
+      printConfig,  // 🔥 new structured config
     } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
@@ -77,6 +78,26 @@ exports.createOrder = async (req, res) => {
       otp,
       status: "Queued",
       orderCode,
+      // 🔥 Save structured printConfig
+      printConfig: printConfig
+        ? {
+            pageOption: printConfig.pageOption || "All",
+            customPages: printConfig.customPages || "",
+            pagesPerSheet: parseInt(printConfig.pagesPerSheet) || 1,
+            copies: parseInt(printConfig.copies) || parseInt(quantity),
+            color: printConfig.color || color,
+            sides: printConfig.sides || sides,
+            orientation: printConfig.orientation || orientation,
+          }
+        : {
+            pageOption: "All",
+            customPages: "",
+            pagesPerSheet: 1,
+            copies: parseInt(quantity),
+            color,
+            sides,
+            orientation,
+          },
     });
 
     // Emit to vendor room

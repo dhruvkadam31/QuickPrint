@@ -83,9 +83,6 @@ export default function MyOrders() {
         <div className="card">
           <div className="flex-between mb-16">
             <h3>My Orders</h3>
-            <button className="btn btn-gray" style={{ fontSize: "0.8rem", padding: "6px 12px" }} onClick={fetchOrders}>
-              🔄 Refresh
-            </button>
           </div>
 
           {/* Tabs */}

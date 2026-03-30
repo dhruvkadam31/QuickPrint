@@ -8,6 +8,23 @@ import socket from "../../services/socket";
 
 const STEPS = ["Upload File", "Configure", "Select Vendor", "Payment"];
 
+// Parse custom page string like "1,3,5-8" → count of pages
+function parseCustomPages(str) {
+  if (!str.trim()) return 0;
+  let count = 0;
+  const parts = str.split(",");
+  for (let p of parts) {
+    p = p.trim();
+    if (p.includes("-")) {
+      const [a, b] = p.split("-").map(Number);
+      if (!isNaN(a) && !isNaN(b) && b >= a) count += b - a + 1;
+    } else {
+      if (!isNaN(Number(p)) && p !== "") count += 1;
+    }
+  }
+  return count;
+}
+
 export default function Upload() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -21,7 +38,10 @@ export default function Upload() {
 
   // Config
   const [serviceType, setServiceType] = useState("Print");
-  const [pageCount, setPageCount] = useState(1);
+  const [pageOption, setPageOption] = useState("All");
+  const [customPages, setCustomPages] = useState("");
+  const [totalDocPages, setTotalDocPages] = useState(1); // total pages in doc
+  const [pagesPerSheet, setPagesPerSheet] = useState(1);
   const [quantity, setQuantity] = useState(1);
   const [color, setColor] = useState("B&W");
   const [sides, setSides] = useState("Single");
@@ -36,8 +56,18 @@ export default function Upload() {
   // Payment
   const [paying, setPaying] = useState(false);
   const [orderDone, setOrderDone] = useState(null);
+  const [isChecked, setIsChecked] = useState(false);
 
   const fileInputRef = useRef();
+
+  // Compute effective page count
+  const effectivePageCount =
+    pageOption === "All"
+      ? totalDocPages
+      : parseCustomPages(customPages) || 0;
+
+  // Pages printed = ceil(effectivePageCount / pagesPerSheet)
+  const printedSheets = Math.ceil(effectivePageCount / pagesPerSheet) || 0;
 
   const pricePerPage = selectedVendor
     ? color === "Color"
@@ -47,8 +77,8 @@ export default function Upload() {
     ? 5
     : 1.5;
 
-  const totalPages = pageCount * quantity;
-  const estimatedPrice = +(totalPages * pricePerPage).toFixed(2);
+  const totalSheets = printedSheets * quantity;
+  const estimatedPrice = +(totalSheets * pricePerPage).toFixed(2);
 
   // Step 3: load vendors
   useEffect(() => {
@@ -61,18 +91,17 @@ export default function Upload() {
     }
   }, [step]);
 
-useEffect(() => {
-  socket.on("vendor-status-change", async () => {
-    try {
-      const res = await getAvailableVendors();
-      setVendors(res.data);
-    } catch {
-      console.log("Failed to refresh vendors");
-    }
-  });
-
-  return () => socket.off("vendor-status-change");
-}, []);
+  useEffect(() => {
+    socket.on("vendor-status-change", async () => {
+      try {
+        const res = await getAvailableVendors();
+        setVendors(res.data);
+      } catch {
+        console.log("Failed to refresh vendors");
+      }
+    });
+    return () => socket.off("vendor-status-change");
+  }, []);
 
   // ── File handling ──
   const handleFileChange = (f) => {
@@ -89,6 +118,7 @@ useEffect(() => {
       const res = await uploadFile(fd);
       setFileUrl(res.data.fileUrl);
       setOriginalFileName(res.data.originalFileName);
+      // Try to get page count from filename or default 1
       toast.success("File uploaded ✅");
       setStep(1);
     } catch (err) {
@@ -98,63 +128,67 @@ useEffect(() => {
     }
   };
 
-  // ── Payment (Razorpay demo) ──
- const handlePayment = async () => {
-  // 🔥 NEW CHECK
-const vendorStillOnline = vendors.find(
-  (v) => v._id === selectedVendor._id
-);
-
-if (!vendorStillOnline?.isOnline || !vendorStillOnline?.shopOpen) {
-  toast.error("Vendor is no longer available");
-  setStep(2); // go back to vendor selection
-  return;
-}
-  console.log("RAZORPAY KEY:", import.meta.env.VITE_RAZORPAY_KEY_ID);
-  if (!selectedVendor) return toast.error("Select vendor");
-
-  const loaded = await loadRazorpayScript();
-  if (!loaded) return toast.error("Razorpay failed to load");
-
-  const options = {
-    key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use environment variable
-    amount: estimatedPrice * 100,
-    currency: "INR",
-    name: "QuickPrint",
-
-    handler: async function (response) {
-      try {
-        const res = await createOrder({
-          userId: user.uid,
-          userName: user.displayName || user.email,
-          vendorId: selectedVendor._id,
-          fileUrl,
-          originalFileName,
-          serviceType,
-          pageCount,
-          quantity,
-          color,
-          sides,
-          orientation,
-          instructions,
-          estimatedPrice,
-          paymentId: response.razorpay_payment_id,
-        });
-
-        setOrderDone(res.data);
-        toast.success("Order placed 🎉");
-
-      } catch (err) {
-        toast.error("Order failed");
-      }
+  // ── Payment (Razorpay) ──
+  const handlePayment = async () => {
+    const vendorStillOnline = vendors.find((v) => v._id === selectedVendor._id);
+    if (!vendorStillOnline?.isOnline || !vendorStillOnline?.shopOpen) {
+      toast.error("Vendor is no longer available");
+      setStep(2);
+      return;
     }
+
+    if (!selectedVendor) return toast.error("Select vendor");
+
+    const loaded = await loadRazorpayScript();
+    if (!loaded) return toast.error("Razorpay failed to load");
+
+    const printConfig = {
+      pageOption,
+      customPages: pageOption === "Custom" ? customPages : "",
+      pagesPerSheet,
+      copies: quantity,
+      color,
+      sides,
+      orientation,
+    };
+
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: estimatedPrice * 100,
+      currency: "INR",
+      name: "QuickPrint",
+      handler: async function (response) {
+        try {
+          const res = await createOrder({
+            userId: user.uid,
+            userName: user.displayName || user.email,
+            vendorId: selectedVendor._id,
+            fileUrl,
+            originalFileName,
+            serviceType,
+            pageCount: effectivePageCount,
+            quantity,
+            color,
+            sides,
+            orientation,
+            instructions,
+            estimatedPrice,
+            paymentId: response.razorpay_payment_id,
+            printConfig,
+          });
+          setOrderDone(res.data);
+          toast.success("Order placed 🎉");
+        } catch (err) {
+          toast.error("Order failed");
+        }
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
   };
 
-  const rzp = new window.Razorpay(options);
-  rzp.open();
-};
-
-const loadRazorpayScript = () =>
+  const loadRazorpayScript = () =>
     new Promise((resolve) => {
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -163,7 +197,7 @@ const loadRazorpayScript = () =>
       document.body.appendChild(script);
     });
 
-  // ── Render ──
+  // ── Order Done Screen ──
   if (orderDone) {
     const { order, otp } = orderDone;
     return (
@@ -190,10 +224,12 @@ const loadRazorpayScript = () =>
     );
   }
 
+  // ── Main Render ──
   return (
     <>
       <UserNavbar />
       <div className="page">
+
         {/* Step Indicator */}
         <div style={{ display: "flex", gap: 0, marginBottom: 24, background: "white", borderRadius: 10, overflow: "hidden", boxShadow: "var(--shadow)" }}>
           {STEPS.map((s, i) => (
@@ -225,44 +261,55 @@ const loadRazorpayScript = () =>
               onClick={() => fileInputRef.current.click()}
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); handleFileChange(e.dataTransfer.files[0]); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                handleFileChange(e.dataTransfer.files[0]);
+              }}
             >
-              <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>📄</div>
-              {file ? (
-                <div>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{file.name}</div>
-                  <div className="text-muted">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Drop file here or click to browse</div>
-                  <div className="text-muted" style={{ fontSize: "0.8rem" }}>PDF, DOC, DOCX, JPG, PNG — max 20MB</div>
-                </div>
-              )}
               <input
                 ref={fileInputRef}
                 type="file"
-                style={{ display: "none" }}
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                style={{ display: "none" }}
                 onChange={(e) => handleFileChange(e.target.files[0])}
               />
+              {file ? (
+                <div>
+                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>📄</div>
+                  <p style={{ fontWeight: 600 }}>{file.name}</p>
+                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+                    {(file.size / 1024).toFixed(1)} KB · Click to change
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📁</div>
+                  <p style={{ fontWeight: 600 }}>Drop file here or click to browse</p>
+                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>PDF, DOC, JPG supported</p>
+                </div>
+              )}
             </div>
             <button
-              className="btn btn-primary btn-full"
-              style={{ marginTop: 16 }}
+              className="btn btn-primary"
+              style={{ width: "100%", marginTop: 16 }}
               onClick={handleUpload}
-              disabled={!file || uploading}
+              disabled={uploading || !file}
             >
               {uploading ? "Uploading..." : "Upload & Continue →"}
             </button>
           </div>
         )}
 
-        {/* STEP 1: Configure */}
+        {/* STEP 1: Configure — Chrome-style print dialog */}
         {step === 1 && (
           <div className="card">
-            <h3 style={{ marginBottom: 16 }}>Print Configuration</h3>
+            <h3 style={{ marginBottom: 4 }}>🖨️ Print Settings</h3>
+            <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 20 }}>
+              {originalFileName}
+            </p>
 
+            {/* Service Type */}
             <div className="form-group">
               <label className="input-label">Service Type</label>
               <select className="input" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
@@ -273,17 +320,106 @@ const loadRazorpayScript = () =>
               </select>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div className="form-group">
-                <label className="input-label">Number of Pages</label>
-                <input className="input" type="number" min={1} value={pageCount} onChange={(e) => setPageCount(+e.target.value)} />
+            {/* Pages section */}
+            <div className="form-group">
+              <label className="input-label">Pages</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {["All", "Custom"].map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setPageOption(opt)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      borderRadius: 6,
+                      border: pageOption === opt ? "2px solid var(--brand)" : "1.5px solid var(--gray-200)",
+                      background: pageOption === opt ? "var(--brand-light)" : "white",
+                      color: pageOption === opt ? "var(--brand)" : "var(--gray-600)",
+                      fontWeight: 600,
+                      fontSize: "0.88rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
               </div>
-              <div className="form-group">
-                <label className="input-label">Copies</label>
-                <input className="input" type="number" min={1} value={quantity} onChange={(e) => setQuantity(+e.target.value)} />
+
+              {pageOption === "All" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <label className="input-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Total pages in doc:</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    value={totalDocPages}
+                    onChange={(e) => setTotalDocPages(Math.max(1, +e.target.value))}
+                    style={{ width: 80 }}
+                  />
+                </div>
+              )}
+
+              {pageOption === "Custom" && (
+                <div>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g. 1,3,5-8"
+                    value={customPages}
+                    onChange={(e) => setCustomPages(e.target.value)}
+                  />
+                  <p className="text-muted" style={{ fontSize: "0.8rem", marginTop: 4 }}>
+                    Use commas and ranges · {parseCustomPages(customPages)} page(s) selected
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Pages per sheet */}
+            <div className="form-group">
+              <label className="input-label">Pages per Sheet</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[1, 2, 4].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPagesPerSheet(n)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      borderRadius: 6,
+                      border: pagesPerSheet === n ? "2px solid var(--brand)" : "1.5px solid var(--gray-200)",
+                      background: pagesPerSheet === n ? "var(--brand-light)" : "white",
+                      color: pagesPerSheet === n ? "var(--brand)" : "var(--gray-600)",
+                      fontWeight: 600,
+                      fontSize: "0.88rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
               </div>
             </div>
 
+            {/* Copies */}
+            <div className="form-group">
+              <label className="input-label">Copies</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button
+                  className="btn btn-gray"
+                  style={{ padding: "6px 14px", fontSize: "1.1rem" }}
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                >−</button>
+                <span style={{ fontWeight: 700, fontSize: "1.1rem", minWidth: 24, textAlign: "center" }}>{quantity}</span>
+                <button
+                  className="btn btn-gray"
+                  style={{ padding: "6px 14px", fontSize: "1.1rem" }}
+                  onClick={() => setQuantity(quantity + 1)}
+                >+</button>
+              </div>
+            </div>
+
+            {/* Color + Sides + Orientation */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <div className="form-group">
                 <label className="input-label">Color</label>
@@ -308,22 +444,37 @@ const loadRazorpayScript = () =>
               </div>
             </div>
 
+            {/* Instructions */}
             <div className="form-group">
               <label className="input-label">Special Instructions (optional)</label>
-              <input className="input" type="text" placeholder="e.g. staple, spiral bind..." value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+              <input
+                className="input"
+                type="text"
+                placeholder="e.g. staple, spiral bind..."
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+              />
             </div>
 
-            {/* Price preview */}
-            <div style={{ background: "var(--brand-light)", borderRadius: 8, padding: "12px 16px", marginBottom: 16 }}>
+            {/* Live Price Preview */}
+            <div style={{ background: "var(--brand-light)", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ fontSize: "0.82rem", color: "var(--gray-500)", marginBottom: 6 }}>
+                {effectivePageCount} pages ÷ {pagesPerSheet}/sheet = {printedSheets} sheet(s) × {quantity} cop{quantity > 1 ? "ies" : "y"} = {totalSheets} sheet(s) × ₹{pricePerPage}
+              </div>
               <div className="flex-between">
-                <span className="text-muted">{totalPages} pages × ₹{pricePerPage}/page</span>
-                <span style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--brand)" }}>≈ ₹{estimatedPrice}</span>
+                <span style={{ fontWeight: 600 }}>Estimated Total</span>
+                <span style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--brand)" }}>₹{estimatedPrice}</span>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn btn-gray" onClick={() => setStep(0)}>← Back</button>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setStep(2)}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={effectivePageCount === 0}
+                onClick={() => setStep(2)}
+              >
                 Select Vendor →
               </button>
             </div>
@@ -332,74 +483,67 @@ const loadRazorpayScript = () =>
 
         {/* STEP 2: Select Vendor */}
         {step === 2 && (
-  <div className="card">
-    
-    {/* Header + Refresh */}
-    <div className="flex-between" style={{ marginBottom: 4 }}>
-      <h3>Available Vendors</h3>
-      <button
-        className="btn btn-gray"
-        style={{ fontSize: "0.8rem", padding: "6px 12px" }}
-        onClick={async () => {
-          setLoadingVendors(true);
-          try {
-            const res = await getAvailableVendors();
-            setVendors(res.data);
-            toast.success("Vendors refreshed 🔄");
-          } catch {
-            toast.error("Failed to refresh vendors");
-          } finally {
-            setLoadingVendors(false);
-          }
-        }}
-      >
-        🔄 Refresh
-      </button>
-    </div>
+          <div className="card">
+            <div className="flex-between" style={{ marginBottom: 4 }}>
+              <h3>Available Vendors</h3>
+              <button
+                className="btn btn-gray"
+                style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                onClick={async () => {
+                  setLoadingVendors(true);
+                  try {
+                    const res = await getAvailableVendors();
+                    setVendors(res.data);
+                    toast.success("Vendors refreshed 🔄");
+                  } catch {
+                    toast.error("Failed to refresh vendors");
+                  } finally {
+                    setLoadingVendors(false);
+                  }
+                }}
+              >
+                🔄 Refresh
+              </button>
+            </div>
 
-    <p className="text-muted" style={{ marginBottom: 16 }}>
-      Only showing online & open shops
-    </p>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              Only showing online & open shops
+            </p>
 
-    {loadingVendors && <p>Loading vendors...</p>}
+            {loadingVendors && <p>Loading vendors...</p>}
 
-    {!loadingVendors && vendors.length === 0 && (
-      <p>No vendors available</p>
-    )}
+            {!loadingVendors && vendors.length === 0 && (
+              <p>No vendors available</p>
+            )}
 
-    {vendors.map((v) => (
-      <div
-        key={v._id}
-        className="order-item"
-        onClick={() => setSelectedVendor(v)}
-        style={{
-          cursor: "pointer",
-          borderColor:
-            selectedVendor?._id === v._id
-              ? "var(--brand)"
-              : "var(--gray-200)",
-        }}
-      >
-        <div>{v.shopName}</div>
-        <div>{v.name}</div>
-      </div>
-    ))}
+            {vendors.map((v) => (
+              <div
+                key={v._id}
+                className="order-item"
+                onClick={() => setSelectedVendor(v)}
+                style={{
+                  cursor: "pointer",
+                  borderColor: selectedVendor?._id === v._id ? "var(--brand)" : "var(--gray-200)",
+                }}
+              >
+                <div>{v.shopName}</div>
+                <div>{v.name}</div>
+              </div>
+            ))}
 
-    <div style={{ marginTop: 16 }}>
-      <button className="btn btn-gray" onClick={() => setStep(1)}>
-        ← Back
-      </button>
-      <button
-        className="btn btn-primary"
-        disabled={!selectedVendor}
-        onClick={() => setStep(3)}
-      >
-        Proceed →
-      </button>
-    </div>
-
-  </div>
-)}
+            <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
+              <button className="btn btn-gray" onClick={() => setStep(1)}>← Back</button>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={!selectedVendor}
+                onClick={() => setStep(3)}
+              >
+                Proceed →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* STEP 3: Payment */}
         {step === 3 && (
@@ -410,9 +554,12 @@ const loadRazorpayScript = () =>
               {[
                 ["File", originalFileName],
                 ["Service", serviceType],
-                ["Pages", `${pageCount} × ${quantity} copies = ${totalPages} pages`],
+                ["Pages", pageOption === "All" ? `All (${totalDocPages})` : customPages],
+                ["Pages/Sheet", pagesPerSheet],
+                ["Copies", quantity],
                 ["Color", color],
                 ["Sides", sides],
+                ["Orientation", orientation],
                 ["Vendor", selectedVendor?.shopName],
               ].map(([k, v]) => (
                 <div key={k} className="flex-between" style={{ marginBottom: 8 }}>
@@ -420,6 +567,12 @@ const loadRazorpayScript = () =>
                   <strong>{v}</strong>
                 </div>
               ))}
+              {instructions && (
+                <div className="flex-between" style={{ marginBottom: 8 }}>
+                  <span className="text-muted">Instructions</span>
+                  <strong style={{ maxWidth: "60%", textAlign: "right" }}>{instructions}</strong>
+                </div>
+              )}
               <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "12px 0" }} />
               <div className="flex-between">
                 <span style={{ fontWeight: 700 }}>Total</span>
@@ -431,14 +584,44 @@ const loadRazorpayScript = () =>
               💳 Demo mode — payment will be simulated (no real charge)
             </div>
 
+            {/* File preview */}
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ marginBottom: 8 }}>📄 File Preview</h4>
+              <div style={{ border: "1px solid #ddd", borderRadius: 8, overflow: "hidden", height: "300px" }}>
+                <iframe src={fileUrl} title="PDF Preview" width="100%" height="100%" style={{ border: "none" }} />
+              </div>
+              <p style={{ fontSize: "0.8rem", marginTop: 6, color: "var(--gray-400)" }}>
+                Preview your file before placing order
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={(e) => setIsChecked(e.target.checked)}
+                />
+                <span style={{ fontSize: "0.9rem" }}>
+                  I have checked my PDF before placing order
+                </span>
+              </label>
+            </div>
+
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn btn-gray" onClick={() => setStep(2)}>← Back</button>
-              <button className="btn btn-success" style={{ flex: 1 }} disabled={paying} onClick={handlePayment}>
-                {paying ? "Processing..." : `Pay ₹${estimatedPrice} & Place Order`}
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={handlePayment}
+                disabled={!isChecked}
+              >
+                Pay ₹{estimatedPrice} & Place Order
               </button>
             </div>
           </div>
         )}
+
       </div>
     </>
   );
