@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../../contexts/AuthContext";
-import { uploadFile, getAvailableVendors, createOrder } from "../../services/api";
+import {
+  uploadFile,
+  getAvailableVendors,
+  createOrder,
+  getWaitTimePrediction,
+} from "../../services/api";
 import UserNavbar from "../../components/user/UserNavbar";
 import socket from "../../services/socket";
 
@@ -52,7 +57,7 @@ export default function Upload() {
   const [vendors, setVendors] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [loadingVendors, setLoadingVendors] = useState(false);
-
+  const [waitTimeData, setWaitTimeData] = useState({});
   // Payment
   const [paying, setPaying] = useState(false);
   const [orderDone, setOrderDone] = useState(null);
@@ -62,9 +67,7 @@ export default function Upload() {
 
   // Compute effective page count
   const effectivePageCount =
-    pageOption === "All"
-      ? totalDocPages
-      : parseCustomPages(customPages) || 0;
+    pageOption === "All" ? totalDocPages : parseCustomPages(customPages) || 0;
 
   // Pages printed = ceil(effectivePageCount / pagesPerSheet)
   const printedSheets = Math.ceil(effectivePageCount / pagesPerSheet) || 0;
@@ -84,8 +87,24 @@ export default function Upload() {
   useEffect(() => {
     if (step === 2) {
       setLoadingVendors(true);
+
       getAvailableVendors()
-        .then((res) => setVendors(res.data))
+        .then(async (res) => {
+          setVendors(res.data);
+
+          const waitResults = {};
+
+          for (const vendor of res.data) {
+            try {
+              const waitRes = await getWaitTimePrediction();
+              waitResults[vendor._id] = waitRes.data.ml_response;
+            } catch {
+              waitResults[vendor._id] = null;
+            }
+          }
+
+          setWaitTimeData(waitResults);
+        })
         .catch(() => toast.error("Could not load vendors"))
         .finally(() => setLoadingVendors(false));
     }
@@ -122,7 +141,9 @@ export default function Upload() {
       toast.success("File uploaded ✅");
       setStep(1);
     } catch (err) {
-      toast.error("Upload failed: " + (err.response?.data?.error || err.message));
+      toast.error(
+        "Upload failed: " + (err.response?.data?.error || err.message)
+      );
     } finally {
       setUploading(false);
     }
@@ -208,14 +229,23 @@ export default function Upload() {
             <div style={{ fontSize: "3rem", marginBottom: 16 }}>🎉</div>
             <h2 style={{ marginBottom: 8 }}>Order Placed!</h2>
             <p className="text-muted" style={{ marginBottom: 24 }}>
-              Your order has been sent to <strong>{selectedVendor.shopName}</strong>
+              Your order has been sent to{" "}
+              <strong>{selectedVendor.shopName}</strong>
             </p>
             <p className="text-muted mb-8">Show this OTP at pickup:</p>
-            <div className="otp-box" style={{ marginBottom: 24 }}>{otp}</div>
-            <p className="text-muted" style={{ fontSize: "0.8rem", marginBottom: 24 }}>
+            <div className="otp-box" style={{ marginBottom: 24 }}>
+              {otp}
+            </div>
+            <p
+              className="text-muted"
+              style={{ fontSize: "0.8rem", marginBottom: 24 }}
+            >
               Order ID: {order.orderId}
             </p>
-            <button className="btn btn-primary" onClick={() => navigate("/my-orders")}>
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate("/my-orders")}
+            >
               Track My Order →
             </button>
           </div>
@@ -229,9 +259,18 @@ export default function Upload() {
     <>
       <UserNavbar />
       <div className="page">
-
         {/* Step Indicator */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 24, background: "white", borderRadius: 10, overflow: "hidden", boxShadow: "var(--shadow)" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 0,
+            marginBottom: 24,
+            background: "white",
+            borderRadius: 10,
+            overflow: "hidden",
+            boxShadow: "var(--shadow)",
+          }}
+        >
           {STEPS.map((s, i) => (
             <div
               key={i}
@@ -241,13 +280,25 @@ export default function Upload() {
                 textAlign: "center",
                 fontSize: "0.8rem",
                 fontWeight: 600,
-                background: i === step ? "var(--brand)" : i < step ? "var(--brand-light)" : "white",
-                color: i === step ? "white" : i < step ? "var(--brand)" : "var(--gray-400)",
-                borderRight: i < STEPS.length - 1 ? "1px solid var(--gray-200)" : "none",
+                background:
+                  i === step
+                    ? "var(--brand)"
+                    : i < step
+                    ? "var(--brand-light)"
+                    : "white",
+                color:
+                  i === step
+                    ? "white"
+                    : i < step
+                    ? "var(--brand)"
+                    : "var(--gray-400)",
+                borderRight:
+                  i < STEPS.length - 1 ? "1px solid var(--gray-200)" : "none",
                 transition: "all 0.2s",
               }}
             >
-              {i < step ? "✓ " : ""}{s}
+              {i < step ? "✓ " : ""}
+              {s}
             </div>
           ))}
         </div>
@@ -259,7 +310,10 @@ export default function Upload() {
             <div
               className={`upload-zone ${dragging ? "dragging" : ""}`}
               onClick={() => fileInputRef.current.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => {
                 e.preventDefault();
@@ -285,8 +339,12 @@ export default function Upload() {
               ) : (
                 <div>
                   <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📁</div>
-                  <p style={{ fontWeight: 600 }}>Drop file here or click to browse</p>
-                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>PDF, DOC, JPG supported</p>
+                  <p style={{ fontWeight: 600 }}>
+                    Drop file here or click to browse
+                  </p>
+                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+                    PDF, DOC, JPG supported
+                  </p>
                 </div>
               )}
             </div>
@@ -305,14 +363,21 @@ export default function Upload() {
         {step === 1 && (
           <div className="card">
             <h3 style={{ marginBottom: 4 }}>🖨️ Print Settings</h3>
-            <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 20 }}>
+            <p
+              className="text-muted"
+              style={{ fontSize: "0.85rem", marginBottom: 20 }}
+            >
               {originalFileName}
             </p>
 
             {/* Service Type */}
             <div className="form-group">
               <label className="input-label">Service Type</label>
-              <select className="input" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
+              <select
+                className="input"
+                value={serviceType}
+                onChange={(e) => setServiceType(e.target.value)}
+              >
                 <option>Print</option>
                 <option>Lamination</option>
                 <option>Binding</option>
@@ -332,9 +397,14 @@ export default function Upload() {
                       flex: 1,
                       padding: "8px 0",
                       borderRadius: 6,
-                      border: pageOption === opt ? "2px solid var(--brand)" : "1.5px solid var(--gray-200)",
-                      background: pageOption === opt ? "var(--brand-light)" : "white",
-                      color: pageOption === opt ? "var(--brand)" : "var(--gray-600)",
+                      border:
+                        pageOption === opt
+                          ? "2px solid var(--brand)"
+                          : "1.5px solid var(--gray-200)",
+                      background:
+                        pageOption === opt ? "var(--brand-light)" : "white",
+                      color:
+                        pageOption === opt ? "var(--brand)" : "var(--gray-600)",
                       fontWeight: 600,
                       fontSize: "0.88rem",
                       cursor: "pointer",
@@ -347,13 +417,20 @@ export default function Upload() {
 
               {pageOption === "All" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <label className="input-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Total pages in doc:</label>
+                  <label
+                    className="input-label"
+                    style={{ margin: 0, whiteSpace: "nowrap" }}
+                  >
+                    Total pages in doc:
+                  </label>
                   <input
                     className="input"
                     type="number"
                     min={1}
                     value={totalDocPages}
-                    onChange={(e) => setTotalDocPages(Math.max(1, +e.target.value))}
+                    onChange={(e) =>
+                      setTotalDocPages(Math.max(1, +e.target.value))
+                    }
                     style={{ width: 80 }}
                   />
                 </div>
@@ -368,8 +445,12 @@ export default function Upload() {
                     value={customPages}
                     onChange={(e) => setCustomPages(e.target.value)}
                   />
-                  <p className="text-muted" style={{ fontSize: "0.8rem", marginTop: 4 }}>
-                    Use commas and ranges · {parseCustomPages(customPages)} page(s) selected
+                  <p
+                    className="text-muted"
+                    style={{ fontSize: "0.8rem", marginTop: 4 }}
+                  >
+                    Use commas and ranges · {parseCustomPages(customPages)}{" "}
+                    page(s) selected
                   </p>
                 </div>
               )}
@@ -387,9 +468,16 @@ export default function Upload() {
                       flex: 1,
                       padding: "8px 0",
                       borderRadius: 6,
-                      border: pagesPerSheet === n ? "2px solid var(--brand)" : "1.5px solid var(--gray-200)",
-                      background: pagesPerSheet === n ? "var(--brand-light)" : "white",
-                      color: pagesPerSheet === n ? "var(--brand)" : "var(--gray-600)",
+                      border:
+                        pagesPerSheet === n
+                          ? "2px solid var(--brand)"
+                          : "1.5px solid var(--gray-200)",
+                      background:
+                        pagesPerSheet === n ? "var(--brand-light)" : "white",
+                      color:
+                        pagesPerSheet === n
+                          ? "var(--brand)"
+                          : "var(--gray-600)",
                       fontWeight: 600,
                       fontSize: "0.88rem",
                       cursor: "pointer",
@@ -409,35 +497,66 @@ export default function Upload() {
                   className="btn btn-gray"
                   style={{ padding: "6px 14px", fontSize: "1.1rem" }}
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                >−</button>
-                <span style={{ fontWeight: 700, fontSize: "1.1rem", minWidth: 24, textAlign: "center" }}>{quantity}</span>
+                >
+                  −
+                </button>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                    minWidth: 24,
+                    textAlign: "center",
+                  }}
+                >
+                  {quantity}
+                </span>
                 <button
                   className="btn btn-gray"
                   style={{ padding: "6px 14px", fontSize: "1.1rem" }}
                   onClick={() => setQuantity(quantity + 1)}
-                >+</button>
+                >
+                  +
+                </button>
               </div>
             </div>
 
             {/* Color + Sides + Orientation */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 12,
+              }}
+            >
               <div className="form-group">
                 <label className="input-label">Color</label>
-                <select className="input" value={color} onChange={(e) => setColor(e.target.value)}>
+                <select
+                  className="input"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                >
                   <option>B&W</option>
                   <option>Color</option>
                 </select>
               </div>
               <div className="form-group">
                 <label className="input-label">Sides</label>
-                <select className="input" value={sides} onChange={(e) => setSides(e.target.value)}>
+                <select
+                  className="input"
+                  value={sides}
+                  onChange={(e) => setSides(e.target.value)}
+                >
                   <option>Single</option>
                   <option>Double</option>
                 </select>
               </div>
               <div className="form-group">
                 <label className="input-label">Orientation</label>
-                <select className="input" value={orientation} onChange={(e) => setOrientation(e.target.value)}>
+                <select
+                  className="input"
+                  value={orientation}
+                  onChange={(e) => setOrientation(e.target.value)}
+                >
                   <option>Portrait</option>
                   <option>Landscape</option>
                 </select>
@@ -446,7 +565,9 @@ export default function Upload() {
 
             {/* Instructions */}
             <div className="form-group">
-              <label className="input-label">Special Instructions (optional)</label>
+              <label className="input-label">
+                Special Instructions (optional)
+              </label>
               <input
                 className="input"
                 type="text"
@@ -457,18 +578,44 @@ export default function Upload() {
             </div>
 
             {/* Live Price Preview */}
-            <div style={{ background: "var(--brand-light)", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>
-              <div style={{ fontSize: "0.82rem", color: "var(--gray-500)", marginBottom: 6 }}>
-                {effectivePageCount} pages ÷ {pagesPerSheet}/sheet = {printedSheets} sheet(s) × {quantity} cop{quantity > 1 ? "ies" : "y"} = {totalSheets} sheet(s) × ₹{pricePerPage}
+            <div
+              style={{
+                background: "var(--brand-light)",
+                borderRadius: 8,
+                padding: "14px 16px",
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "0.82rem",
+                  color: "var(--gray-500)",
+                  marginBottom: 6,
+                }}
+              >
+                {effectivePageCount} pages ÷ {pagesPerSheet}/sheet ={" "}
+                {printedSheets} sheet(s) × {quantity} cop
+                {quantity > 1 ? "ies" : "y"} = {totalSheets} sheet(s) × ₹
+                {pricePerPage}
               </div>
               <div className="flex-between">
                 <span style={{ fontWeight: 600 }}>Estimated Total</span>
-                <span style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--brand)" }}>₹{estimatedPrice}</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.2rem",
+                    color: "var(--brand)",
+                  }}
+                >
+                  ₹{estimatedPrice}
+                </span>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn btn-gray" onClick={() => setStep(0)}>← Back</button>
+              <button className="btn btn-gray" onClick={() => setStep(0)}>
+                ← Back
+              </button>
               <button
                 className="btn btn-primary"
                 style={{ flex: 1 }}
@@ -516,23 +663,93 @@ export default function Upload() {
               <p>No vendors available</p>
             )}
 
-            {vendors.map((v) => (
-              <div
-                key={v._id}
-                className="order-item"
-                onClick={() => setSelectedVendor(v)}
-                style={{
-                  cursor: "pointer",
-                  borderColor: selectedVendor?._id === v._id ? "var(--brand)" : "var(--gray-200)",
-                }}
-              >
-                <div>{v.shopName}</div>
-                <div>{v.name}</div>
-              </div>
-            ))}
+            {vendors.map((v) => {
+              const waitInfo = waitTimeData[v._id];
+
+              return (
+                <div
+                  key={v._id}
+                  className="order-item"
+                  onClick={() => setSelectedVendor(v)}
+                  style={{
+                    cursor: "pointer",
+                    borderColor:
+                      selectedVendor?._id === v._id
+                        ? "var(--brand)"
+                        : "var(--gray-200)",
+                    padding: "16px",
+                    borderRadius: "10px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "1rem" }}>
+                        {v.shopName}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--gray-500)",
+                        }}
+                      >
+                        {v.name}
+                      </div>
+                    </div>
+
+                    {waitInfo && (
+                      <div
+                        style={{
+                          background: "#f0fdf4",
+                          color: "#166534",
+                          padding: "6px 10px",
+                          borderRadius: "8px",
+                          fontWeight: 600,
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        ~{waitInfo.estimated_wait_minutes} mins
+                      </div>
+                    )}
+                  </div>
+
+                  {waitInfo && (
+                    <>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          marginBottom: "4px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Urgency: {waitInfo.urgency}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "0.82rem",
+                          color: "var(--gray-500)",
+                        }}
+                      >
+                        {waitInfo.message_to_student}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-              <button className="btn btn-gray" onClick={() => setStep(1)}>← Back</button>
+              <button className="btn btn-gray" onClick={() => setStep(1)}>
+                ← Back
+              </button>
               <button
                 className="btn btn-primary"
                 style={{ flex: 1 }}
@@ -550,11 +767,21 @@ export default function Upload() {
           <div className="card">
             <h3 style={{ marginBottom: 16 }}>Order Summary</h3>
 
-            <div style={{ background: "var(--gray-50)", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+            <div
+              style={{
+                background: "var(--gray-50)",
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 16,
+              }}
+            >
               {[
                 ["File", originalFileName],
                 ["Service", serviceType],
-                ["Pages", pageOption === "All" ? `All (${totalDocPages})` : customPages],
+                [
+                  "Pages",
+                  pageOption === "All" ? `All (${totalDocPages})` : customPages,
+                ],
                 ["Pages/Sheet", pagesPerSheet],
                 ["Copies", quantity],
                 ["Color", color],
@@ -562,7 +789,11 @@ export default function Upload() {
                 ["Orientation", orientation],
                 ["Vendor", selectedVendor?.shopName],
               ].map(([k, v]) => (
-                <div key={k} className="flex-between" style={{ marginBottom: 8 }}>
+                <div
+                  key={k}
+                  className="flex-between"
+                  style={{ marginBottom: 8 }}
+                >
                   <span className="text-muted">{k}</span>
                   <strong>{v}</strong>
                 </div>
@@ -570,27 +801,116 @@ export default function Upload() {
               {instructions && (
                 <div className="flex-between" style={{ marginBottom: 8 }}>
                   <span className="text-muted">Instructions</span>
-                  <strong style={{ maxWidth: "60%", textAlign: "right" }}>{instructions}</strong>
+                  <strong style={{ maxWidth: "60%", textAlign: "right" }}>
+                    {instructions}
+                  </strong>
                 </div>
               )}
-              <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "12px 0" }} />
+              <hr
+                style={{
+                  border: "none",
+                  borderTop: "1px solid var(--gray-200)",
+                  margin: "12px 0",
+                }}
+              />
               <div className="flex-between">
                 <span style={{ fontWeight: 700 }}>Total</span>
-                <span style={{ fontWeight: 700, fontSize: "1.3rem", color: "var(--brand)" }}>₹{estimatedPrice}</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.3rem",
+                    color: "var(--brand)",
+                  }}
+                >
+                  ₹{estimatedPrice}
+                </span>
               </div>
             </div>
 
-            <div style={{ background: "var(--warning-light)", borderRadius: 8, padding: 12, marginBottom: 16, fontSize: "0.85rem", color: "#92400e" }}>
+            {selectedVendor && waitTimeData[selectedVendor._id] && (
+              <div
+                style={{
+                  background: "#ecfdf5",
+                  borderRadius: 10,
+                  padding: 16,
+                  marginBottom: 16,
+                  border: "1px solid #bbf7d0",
+                }}
+              >
+                <h4 style={{ marginBottom: 10 }}>⏱ Estimated Ready Time</h4>
+
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "1.2rem",
+                    color: "#166534",
+                    marginBottom: 8,
+                  }}
+                >
+                  ~{waitTimeData[selectedVendor._id].estimated_wait_minutes}{" "}
+                  mins
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "0.9rem",
+                    marginBottom: 6,
+                  }}
+                >
+                  <strong>Urgency:</strong>{" "}
+                  {waitTimeData[selectedVendor._id].urgency}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "var(--gray-600)",
+                  }}
+                >
+                  {waitTimeData[selectedVendor._id].advice}
+                </div>
+              </div>
+            )}
+
+            <div
+              style={{
+                background: "var(--warning-light)",
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 16,
+                fontSize: "0.85rem",
+                color: "#92400e",
+              }}
+            >
               💳 Demo mode — payment will be simulated (no real charge)
             </div>
 
             {/* File preview */}
             <div style={{ marginBottom: 16 }}>
               <h4 style={{ marginBottom: 8 }}>📄 File Preview</h4>
-              <div style={{ border: "1px solid #ddd", borderRadius: 8, overflow: "hidden", height: "300px" }}>
-                <iframe src={fileUrl} title="PDF Preview" width="100%" height="100%" style={{ border: "none" }} />
+              <div
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  height: "300px",
+                }}
+              >
+                <iframe
+                  src={fileUrl}
+                  title="PDF Preview"
+                  width="100%"
+                  height="100%"
+                  style={{ border: "none" }}
+                />
               </div>
-              <p style={{ fontSize: "0.8rem", marginTop: 6, color: "var(--gray-400)" }}>
+              <p
+                style={{
+                  fontSize: "0.8rem",
+                  marginTop: 6,
+                  color: "var(--gray-400)",
+                }}
+              >
                 Preview your file before placing order
               </p>
             </div>
@@ -609,7 +929,9 @@ export default function Upload() {
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn btn-gray" onClick={() => setStep(2)}>← Back</button>
+              <button className="btn btn-gray" onClick={() => setStep(2)}>
+                ← Back
+              </button>
               <button
                 className="btn btn-primary"
                 style={{ flex: 1 }}
@@ -621,7 +943,6 @@ export default function Upload() {
             </div>
           </div>
         )}
-
       </div>
     </>
   );
