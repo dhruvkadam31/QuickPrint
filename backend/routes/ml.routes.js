@@ -43,4 +43,38 @@ router.post("/demand", async (req, res) => {
   }
 });
 
+router.post("/waittime", async (req, res) => {
+  try {
+    const payload = {
+      queue_length: 5,
+      backlog_pages: 120,
+      active_printers: 2,
+      printer_speed_ppm: 30,
+      job_pages: 15,
+      is_color: 0,
+      is_duplex: 0,
+      predicted_demand: 20
+    };
+
+    const response = await axios.post(
+      "http://127.0.0.1:8001/predict",
+      payload
+    );
+
+    res.json({
+      success: true,
+      ml_response: response.data
+    });
+
+  } catch (error) {
+    console.error("ML Wait Time Prediction Error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch wait time prediction",
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
