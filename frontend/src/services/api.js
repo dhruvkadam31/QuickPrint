@@ -40,6 +40,8 @@ export const verifyOTP = (data) => api.post("/orders/verify-otp", data);
 export const getVendorQueue = (vendorId) =>
   api.get(`/orders/queue/${vendorId}`);
 
+export const getDemandPrediction = () => api.post("/api/ml/demand");
+
 export const getWaitTimePrediction = () => api.post("/api/ml/waittime");
 
 export default api;
