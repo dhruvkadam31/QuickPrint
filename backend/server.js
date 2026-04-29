@@ -31,6 +31,9 @@ const orderRoutes = require("./routes/order.routes");
 app.use("/vendor", vendorRoutes);
 app.use("/orders", orderRoutes);
 
+const mlRoutes = require("./routes/ml.routes");
+app.use("/api/ml", mlRoutes);
+
 // Health check
 app.get("/health", (req, res) => res.json({ status: "OK" }));
 
