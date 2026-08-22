@@ -1,5 +1,6 @@
 const Order = require("../models/Order");
 const Vendor = require("../models/Vendor");
+const documentProcessor = require("../services/documentProcessor");
 const path = require("path");
 
 // Generate 6-digit OTP
@@ -7,20 +8,35 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// POST /orders/upload - upload file
+// POST /orders/upload - upload and process file
 exports.uploadFile = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    console.log(`📁 Processing upload: ${req.file.originalname}`);
+
+    // Process the document (validate, convert, count pages, etc.)
+    const processingResult = await documentProcessor.processDocument(req.file);
+
+    console.log(`✅ File processed successfully: ${processingResult.pageCount} pages`);
+
     res.json({
       success: true,
-      fileUrl,
-      originalFileName: req.file.originalname,
-      filename: req.file.filename,
+      ...processingResult
     });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("❌ File processing failed:", err);
+
+    // Cleanup failed upload
+    if (req.file?.filename) {
+      await documentProcessor.cleanup(req.file.filename);
+    }
+
+    res.status(500).json({
+      error: "File processing failed",
+      details: err.message
+    });
   }
 };
 
@@ -35,7 +51,6 @@ exports.createOrder = async (req, res) => {
       fileUrl,
       originalFileName,
       serviceType,
-      pageCount,
       quantity,
       color,
       sides,
@@ -44,6 +59,10 @@ exports.createOrder = async (req, res) => {
       estimatedPrice,
       paymentId,
       printConfig,  // 🔥 new structured config
+      pageCount, // Now comes from processed file data
+      processedUrl,
+      thumbnailUrl,
+      metadata
     } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
@@ -61,6 +80,8 @@ exports.createOrder = async (req, res) => {
       vendorId,
       vendorName: vendor.shopName,
       fileUrl,
+      processedUrl, // Processed PDF URL
+      thumbnailUrl, // Preview thumbnail
       originalFileName,
       serviceType,
       pageCount: parseInt(pageCount),
@@ -78,6 +99,7 @@ exports.createOrder = async (req, res) => {
       otp,
       status: "Queued",
       orderCode,
+      metadata, // Document metadata
       // 🔥 Save structured printConfig
       printConfig: printConfig
         ? {

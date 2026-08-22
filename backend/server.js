@@ -20,6 +20,7 @@ const io = new Server(server, {
 app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/processed", express.static(path.join(__dirname, "processed")));
 
 // Make io accessible in routes
 app.set("io", io);

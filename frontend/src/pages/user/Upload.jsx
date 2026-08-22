@@ -135,10 +135,13 @@ export default function Upload() {
       const fd = new FormData();
       fd.append("file", file);
       const res = await uploadFile(fd);
+
+      // Set processed file data
       setFileUrl(res.data.fileUrl);
-      setOriginalFileName(res.data.originalFileName);
-      // Try to get page count from filename or default 1
-      toast.success("File uploaded ✅");
+      setOriginalFileName(res.data.originalName);
+      setTotalDocPages(res.data.pageCount); // Automatically detected page count
+
+      toast.success(`File processed successfully! Detected ${res.data.pageCount} pages.`);
       setStep(1);
     } catch (err) {
       toast.error(
@@ -197,6 +200,9 @@ export default function Upload() {
             estimatedPrice,
             paymentId: response.razorpay_payment_id,
             printConfig,
+            processedUrl: res.data.processedUrl, // Processed PDF URL
+            thumbnailUrl: res.data.thumbnailUrl, // Preview thumbnail
+            metadata: res.data.metadata // Document metadata
           });
           setOrderDone(res.data);
           toast.success("Order placed 🎉");
