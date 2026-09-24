@@ -1,0 +1,121 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+
+export default function AdminLogin() {
+  const [passphrase, setPassphrase] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    setTimeout(() => {
+      // Admin passphrase validation
+      if (passphrase === "admin123" || passphrase === "quickprint2026") {
+        localStorage.setItem("adminToken", "admin_authenticated_session_token");
+        localStorage.setItem("isAdmin", "true");
+        toast.success("Welcome, Administrator!");
+        navigate("/admin/dashboard");
+      } else {
+        toast.error("Invalid Admin Passphrase. (Try 'admin123')");
+        setLoading(false);
+      }
+    }, 400);
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+        padding: 20,
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          background: "#ffffff",
+          borderRadius: 12,
+          padding: 32,
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: "2.5rem",
+              width: 64,
+              height: 64,
+              margin: "0 auto 12px auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#fee2e2",
+              borderRadius: "50%",
+            }}
+          >
+            🛡️
+          </div>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
+            QuickPrint Admin Portal
+          </h2>
+          <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+            Restricted access for system administrators & campus operations.
+          </p>
+        </div>
+
+        <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: 6 }}>
+              Administrator Passphrase
+            </label>
+            <input
+              type="password"
+              className="input"
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0" }}
+              placeholder="••••••••••••"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              required
+              autoFocus
+            />
+            <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 4, display: "block" }}>
+              Default key: <code>admin123</code>
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{
+              width: "100%",
+              padding: "10px 16px",
+              fontWeight: 600,
+              background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+            }}
+            disabled={loading}
+          >
+            {loading ? "Verifying..." : "Login to Admin Console →"}
+          </button>
+        </form>
+
+        <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #e2e8f0", textAlign: "center" }}>
+          <button
+            onClick={() => navigate("/")}
+            className="btn btn-gray"
+            style={{ fontSize: "0.8rem", width: "100%" }}
+          >
+            ← Back to Customer Login
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

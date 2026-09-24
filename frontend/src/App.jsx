@@ -13,6 +13,10 @@ import VendorOrders from "./pages/vendor/Orders";
 import VendorPickup from "./pages/vendor/Pickup";
 import VendorSettings from "./pages/vendor/Settings";
 
+// Admin pages
+import AdminLogin from "./pages/admin/Login";
+import AdminDashboard from "./pages/admin/Dashboard";
+
 // Route guards
 function UserRoute({ children }) {
   const { user } = useAuth();
@@ -22,6 +26,11 @@ function UserRoute({ children }) {
 function VendorRoute({ children }) {
   const token = localStorage.getItem("vendorToken");
   return token ? children : <Navigate to="/vendor/login" replace />;
+}
+
+function AdminRoute({ children }) {
+  const isAdmin = localStorage.getItem("isAdmin") === "true";
+  return isAdmin ? children : <Navigate to="/admin/login" replace />;
 }
 
 export default function App() {
@@ -38,6 +47,11 @@ export default function App() {
       <Route path="/vendor/orders" element={<VendorRoute><VendorOrders /></VendorRoute>} />
       <Route path="/vendor/pickup" element={<VendorRoute><VendorPickup /></VendorRoute>} />
       <Route path="/vendor/settings" element={<VendorRoute><VendorSettings /></VendorRoute>} />
+
+      {/* Admin Routes */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+      <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

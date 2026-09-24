@@ -38,6 +38,9 @@ export default function Upload() {
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState("");
   const [originalFileName, setOriginalFileName] = useState("");
+  const [processedUrl, setProcessedUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [metadata, setMetadata] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
 
@@ -137,11 +140,14 @@ export default function Upload() {
       const res = await uploadFile(fd);
 
       // Set processed file data
-      setFileUrl(res.data.fileUrl);
-      setOriginalFileName(res.data.originalName);
-      setTotalDocPages(res.data.pageCount); // Automatically detected page count
+      setFileUrl(res.data.fileUrl || "");
+      setOriginalFileName(res.data.originalName || file.name);
+      setTotalDocPages(res.data.pageCount || 1); // Automatically detected page count
+      setProcessedUrl(res.data.processedUrl || "");
+      setThumbnailUrl(res.data.thumbnailUrl || "");
+      setMetadata(res.data.metadata || null);
 
-      toast.success(`File processed successfully! Detected ${res.data.pageCount} pages.`);
+      toast.success(`File processed successfully! Detected ${res.data.pageCount || 1} pages.`);
       setStep(1);
     } catch (err) {
       toast.error(
@@ -163,23 +169,50 @@ export default function Upload() {
 
     if (!selectedVendor) return toast.error("Select vendor");
 
+    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+    const isMock = !razorpayKey || razorpayKey === "rzp_test_placeholder" || razorpayKey.includes("demo");
+
+    if (isMock) {
+      setPaying(true);
+      try {
+        const res = await createOrder({
+          userId: user.uid,
+          userName: user.displayName || user.email,
+          userEmail: user.email,
+          vendorId: selectedVendor._id,
+          fileUrl,
+          originalFileName,
+          serviceType,
+          pageCount: effectivePageCount,
+          quantity,
+          color,
+          sides,
+          orientation,
+          instructions,
+          estimatedPrice,
+          paymentId: `sim_pay_${Date.now()}`,
+          printConfig,
+          processedUrl,
+          thumbnailUrl,
+          metadata,
+          predictedWaitTime: waitTimeData[selectedVendor._id]?.predicted_wait_time || 10,
+        });
+        setOrderDone(res.data);
+        toast.success("Order placed successfully (Sandbox Mode)!");
+      } catch (err) {
+        toast.error("Order failed: " + (err.response?.data?.error || err.message));
+      } finally {
+        setPaying(false);
+      }
+      return;
+    }
+
     const loaded = await loadRazorpayScript();
     if (!loaded) return toast.error("Razorpay failed to load");
 
-    const printConfig = {
-      pageOption,
-      customPages: pageOption === "Custom" ? customPages : "",
-      pagesPerSheet,
-      copies: quantity,
-      color,
-      sides,
-      orientation,
-    };
-    console.log("RAZORPAY KEY:", import.meta.env.VITE_RAZORPAY_KEY_ID);
-    
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: estimatedPrice * 100,
+      key: razorpayKey,
+      amount: Math.round(estimatedPrice * 100),
       currency: "INR",
       name: "QuickPrint",
       handler: async function (response) {
@@ -187,6 +220,7 @@ export default function Upload() {
           const res = await createOrder({
             userId: user.uid,
             userName: user.displayName || user.email,
+            userEmail: user.email,
             vendorId: selectedVendor._id,
             fileUrl,
             originalFileName,
@@ -200,14 +234,15 @@ export default function Upload() {
             estimatedPrice,
             paymentId: response.razorpay_payment_id,
             printConfig,
-            processedUrl: res.data.processedUrl, // Processed PDF URL
-            thumbnailUrl: res.data.thumbnailUrl, // Preview thumbnail
-            metadata: res.data.metadata // Document metadata
+            processedUrl,
+            thumbnailUrl,
+            metadata,
+            predictedWaitTime: waitTimeData[selectedVendor._id]?.predicted_wait_time || 10,
           });
           setOrderDone(res.data);
           toast.success("Order placed 🎉");
         } catch (err) {
-          toast.error("Order failed");
+          toast.error("Order failed: " + (err.response?.data?.error || err.message));
         }
       },
     };

@@ -1,7 +1,12 @@
 const Order = require("../models/Order");
 const Vendor = require("../models/Vendor");
 const documentProcessor = require("../services/documentProcessor");
-const path = require("path");
+const { processRefund } = require("../services/refundService");
+const {
+  sendOrderConfirmationEmail,
+  sendOrderStatusUpdateEmail,
+  sendOrderCancellationEmail,
+} = require("../services/emailService");
 
 // Generate 6-digit OTP
 function generateOTP() {
@@ -22,9 +27,8 @@ exports.uploadFile = async (req, res) => {
 
     res.json({
       success: true,
-      ...processingResult
+      ...processingResult,
     });
-
   } catch (err) {
     console.error("❌ File processing failed:", err);
 
@@ -35,7 +39,7 @@ exports.uploadFile = async (req, res) => {
 
     res.status(500).json({
       error: "File processing failed",
-      details: err.message
+      details: err.message,
     });
   }
 };
@@ -43,10 +47,10 @@ exports.uploadFile = async (req, res) => {
 // POST /orders/create
 exports.createOrder = async (req, res) => {
   try {
-    console.log(req.body);
     const {
       userId,
       userName,
+      userEmail,
       vendorId,
       fileUrl,
       originalFileName,
@@ -58,17 +62,18 @@ exports.createOrder = async (req, res) => {
       instructions,
       estimatedPrice,
       paymentId,
-      printConfig,  // 🔥 new structured config
-      pageCount, // Now comes from processed file data
+      printConfig,
+      pageCount,
       processedUrl,
       thumbnailUrl,
-      metadata
+      metadata,
+      predictedWaitTime,
     } = req.body;
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    const totalPages = parseInt(pageCount) * parseInt(quantity);
+    const totalPages = parseInt(pageCount || 1) * parseInt(quantity || 1);
     const commission = +(estimatedPrice * 0.1).toFixed(2);
     const vendorEarnings = +(estimatedPrice * 0.9).toFixed(2);
     const otp = generateOTP();
@@ -77,15 +82,16 @@ exports.createOrder = async (req, res) => {
     const order = await Order.create({
       userId,
       userName,
+      userEmail,
       vendorId,
       vendorName: vendor.shopName,
       fileUrl,
-      processedUrl, // Processed PDF URL
-      thumbnailUrl, // Preview thumbnail
+      processedUrl,
+      thumbnailUrl,
       originalFileName,
       serviceType,
-      pageCount: parseInt(pageCount),
-      quantity: parseInt(quantity),
+      pageCount: parseInt(pageCount || 1),
+      quantity: parseInt(quantity || 1),
       totalPages,
       color,
       sides,
@@ -99,14 +105,14 @@ exports.createOrder = async (req, res) => {
       otp,
       status: "Queued",
       orderCode,
-      metadata, // Document metadata
-      // 🔥 Save structured printConfig
+      metadata,
+      predictedWaitTime: predictedWaitTime || 10,
       printConfig: printConfig
         ? {
             pageOption: printConfig.pageOption || "All",
             customPages: printConfig.customPages || "",
             pagesPerSheet: parseInt(printConfig.pagesPerSheet) || 1,
-            copies: parseInt(printConfig.copies) || parseInt(quantity),
+            copies: parseInt(printConfig.copies) || parseInt(quantity || 1),
             color: printConfig.color || color,
             sides: printConfig.sides || sides,
             orientation: printConfig.orientation || orientation,
@@ -115,16 +121,23 @@ exports.createOrder = async (req, res) => {
             pageOption: "All",
             customPages: "",
             pagesPerSheet: 1,
-            copies: parseInt(quantity),
+            copies: parseInt(quantity || 1),
             color,
             sides,
             orientation,
           },
     });
 
-    // Emit to vendor room
+    // Send confirmation email asynchronously (fail-safe)
+    sendOrderConfirmationEmail(order, userEmail).catch((e) =>
+      console.warn("Non-fatal email error:", e.message)
+    );
+
+    // Emit to socket
     const io = req.app.get("io");
-    io.emit("order-created", { vendorId, order });
+    if (io) {
+      io.emit("order-created", { vendorId, order });
+    }
 
     res.status(201).json({ success: true, order, otp });
   } catch (err) {
@@ -146,7 +159,7 @@ exports.getUserOrders = async (req, res) => {
 exports.updateStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ["Queued", "Printing", "Ready", "Picked Up"];
+    const validStatuses = ["Queued", "Printing", "Ready", "Picked Up", "Cancelled"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
@@ -164,13 +177,96 @@ exports.updateStatus = async (req, res) => {
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
+    // Send status update email if Ready
+    if (status === "Ready") {
+      sendOrderStatusUpdateEmail(order, order.userEmail).catch((e) =>
+        console.warn("Non-fatal email error:", e.message)
+      );
+    }
+
     // Emit real-time update
     const io = req.app.get("io");
-    io.emit("order-updated", { orderId: order.orderId, status, order });
+    if (io) {
+      io.emit("order-updated", { orderId: order.orderId, status, order });
+    }
 
     res.json({ success: true, order });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /orders/:orderId/cancel
+exports.cancelOrder = async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const reason = req.body.reason || "Cancelled by customer";
+    const cancelledBy = req.body.cancelledBy || "CUSTOMER";
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found" });
+    }
+
+    if (order.status === "Ready" || order.status === "Picked Up") {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot cancel order in '${order.status}' status. It has already been processed.`,
+      });
+    }
+
+    if (order.status === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        error: "Order is already cancelled.",
+      });
+    }
+
+    // Process refund via safe idempotent refund service
+    const refundResult = await processRefund(order, reason);
+
+    const updateData = {
+      status: "Cancelled",
+      cancellationReason: reason,
+      cancelledAt: new Date(),
+      cancelledBy,
+      refundId: refundResult.refundId || order.refundId,
+      refundStatus: refundResult.refundStatus || "not_applicable",
+      refundAmount: refundResult.refundAmount || 0,
+      refundProcessedAt: refundResult.refundProcessedAt || null,
+      paymentStatus: refundResult.refundId ? "refunded" : order.paymentStatus,
+    };
+
+    const updatedOrder = await Order.findOneAndUpdate(
+      { orderId },
+      { $set: updateData },
+      { new: true }
+    );
+
+    // Send cancellation and refund email asynchronously
+    sendOrderCancellationEmail(updatedOrder, req.body.userEmail || updatedOrder.userEmail, refundResult).catch(
+      (e) => console.warn("Non-fatal email error:", e.message)
+    );
+
+    // Real-time socket notification
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("order-updated", {
+        orderId: updatedOrder.orderId,
+        status: "Cancelled",
+        order: updatedOrder,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      refundInfo: refundResult,
+      order: updatedOrder,
+    });
+  } catch (err) {
+    console.error("Cancel order error:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 
@@ -192,7 +288,9 @@ exports.verifyOTP = async (req, res) => {
     await order.save();
 
     const io = req.app.get("io");
-    io.emit("order-updated", { orderId: order.orderId, status: "Picked Up", order });
+    if (io) {
+      io.emit("order-updated", { orderId: order.orderId, status: "Picked Up", order });
+    }
 
     res.json({ success: true, order });
   } catch (err) {
@@ -208,6 +306,16 @@ exports.getVendorQueue = async (req, res) => {
       status: { $in: ["Queued", "Printing"] },
     }).sort({ createdAt: 1 });
     res.json(queue);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /orders/admin/all - for admin overview
+exports.getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({}).sort({ createdAt: -1 });
+    res.json(orders);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

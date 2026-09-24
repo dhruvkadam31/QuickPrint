@@ -9,8 +9,10 @@ router.post("/create", orderController.createOrder);
 
 router.get("/user/:userId", orderController.getUserOrders);
 router.get("/queue/:vendorId", orderController.getVendorQueue);
+router.get("/admin/all", orderController.getAllOrders);
 
 router.patch("/:orderId/status", authMiddleware, orderController.updateStatus);
+router.post("/:orderId/cancel", orderController.cancelOrder);
 router.post("/verify-otp", authMiddleware, orderController.verifyOTP);
 
 module.exports = router;

@@ -5,9 +5,9 @@ const BASE_URL = "http://localhost:5000";
 
 const api = axios.create({ baseURL: BASE_URL });
 
-// Attach vendor JWT token to every request if present
+// Attach vendor or admin JWT token to every request if present
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("vendorToken");
+  const token = localStorage.getItem("vendorToken") || localStorage.getItem("adminToken");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -36,12 +36,18 @@ export const createOrder = (data) => api.post("/orders/create", data);
 export const getUserOrders = (userId) => api.get(`/orders/user/${userId}`);
 export const updateOrderStatus = (orderId, status) =>
   api.patch(`/orders/${orderId}/status`, { status });
+export const cancelOrder = (orderId, data) =>
+  api.post(`/orders/${orderId}/cancel`, data);
 export const verifyOTP = (data) => api.post("/orders/verify-otp", data);
 export const getVendorQueue = (vendorId) =>
   api.get(`/orders/queue/${vendorId}`);
 
-export const getDemandPrediction = () => api.post("/api/ml/demand");
+// ─── ADMIN & ANALYTICS ──────────────────────────────────
+export const getAdminAnalyticsSummary = () => api.get("/api/analytics/summary");
+export const getAllOrdersAdmin = () => api.get("/orders/admin/all");
 
+// ─── ML PREDICTIONS ──────────────────────────────────────
+export const getDemandPrediction = () => api.post("/api/ml/demand");
 export const getWaitTimePrediction = () => api.post("/api/ml/waittime");
 
 export default api;

@@ -18,6 +18,7 @@ export default function UserNavbar() {
   const links = [
     { label: "📤 Upload", path: "/upload" },
     { label: "📦 My Orders", path: "/my-orders" },
+    { label: "🛡️ Admin", path: "/admin" },
   ];
 
   return (

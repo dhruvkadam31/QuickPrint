@@ -14,9 +14,10 @@ const orderSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // User (Firebase UID)
+    // User (Firebase UID & info)
     userId: { type: String, required: true },
     userName: { type: String },
+    userEmail: { type: String },
 
     // Vendor
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", required: true },
@@ -25,6 +26,9 @@ const orderSchema = new mongoose.Schema(
     // File
     fileUrl: { type: String, required: true },
     originalFileName: { type: String },
+    processedUrl: { type: String },
+    thumbnailUrl: { type: String },
+    metadata: { type: mongoose.Schema.Types.Mixed },
 
     // Print config
     serviceType: {
@@ -40,7 +44,7 @@ const orderSchema = new mongoose.Schema(
     orientation: { type: String, enum: ["Portrait", "Landscape"], default: "Portrait" },
     instructions: { type: String, default: "" },
 
-    // 🔥 Structured print config (for vendor display)
+    // Structured print config (for vendor display)
     printConfig: {
       pageOption: { type: String, enum: ["All", "Custom"], default: "All" },
       customPages: { type: String, default: "" },   // e.g. "1,3,5-8"
@@ -56,26 +60,34 @@ const orderSchema = new mongoose.Schema(
     commission: { type: Number },
     vendorEarnings: { type: Number },
 
-    // Payment
+    // Payment & Refund
     paymentId: { type: String },
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
     },
+    refundId: { type: String },
+    refundStatus: { type: String },
+    refundAmount: { type: Number },
+    refundProcessedAt: { type: Date },
 
     // OTP
     otp: { type: String },
     otpUsed: { type: Boolean, default: false },
 
-    // Order lifecycle
+    // Order lifecycle & Cancellation
     status: {
       type: String,
-      enum: ["Queued", "Printing", "Ready", "Picked Up"],
+      enum: ["Queued", "Printing", "Ready", "Picked Up", "Cancelled"],
       default: "Queued",
     },
+    cancellationReason: { type: String },
+    cancelledAt: { type: Date },
+    cancelledBy: { type: String },
 
-    // Timestamps for each status change
+    // ML Predictions & timestamps
+    predictedWaitTime: { type: Number },
     printStartedAt: { type: Date },
     readyAt: { type: Date },
     pickedUpAt: { type: Date },
