@@ -76,23 +76,39 @@ export default function VendorDashboard() {
 
   return (
     <VendorLayout>
-      <button
-        onClick={async () => {
-          await Notification.requestPermission();
-
-          const audio = new Audio("/notification.mp3");
-          audio.play().catch(() => {});
-
-          toast.success("Notifications enabled 🔔");
-        }}
-      >
-        Enable Alerts
-      </button>
-
       <div className="flex-between mb-16">
         <div>
-          <h2 style={{ marginBottom: 2 }}>Dashboard</h2>
-          <p className="text-muted">
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h2 style={{ margin: 0 }}>Dashboard</h2>
+            <button
+              onClick={async () => {
+                const p = await Notification.requestPermission();
+                const audio = new Audio("/notification.mp3");
+                audio.play().catch(() => {});
+                if (p === "granted") {
+                  toast.success("Alerts enabled! 🔔");
+                } else {
+                  toast.error("Please allow notifications in your browser settings");
+                }
+              }}
+              style={{
+                background: "var(--brand-light)",
+                color: "var(--brand)",
+                border: "none",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                fontSize: "0.75rem",
+                fontWeight: "bold",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px"
+              }}
+            >
+              🔔 Enable Alerts
+            </button>
+          </div>
+          <p className="text-muted" style={{ marginTop: 4 }}>
             {new Date().toLocaleDateString("en-IN", {
               weekday: "long",
               year: "numeric",

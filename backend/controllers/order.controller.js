@@ -246,10 +246,10 @@ exports.cancelOrder = async (req, res) => {
       return res.status(403).json({ success: false, error: "Cannot cancel another user's order" });
     }
 
-    if (!["Queued", "Printing"].includes(order.status)) {
+    if (order.status !== "Queued") {
       return res.status(400).json({
         success: false,
-        error: `Cannot cancel order in '${order.status}' status.`,
+        error: `Cannot cancel order in '${order.status}' status. Orders can only be cancelled while Queued.`,
       });
     }
 

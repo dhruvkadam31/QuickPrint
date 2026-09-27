@@ -2,6 +2,7 @@ const Order = require("../models/Order");
 const Vendor = require("../models/Vendor");
 const PaymentAttempt = require("../models/PaymentAttempt");
 const razorpay = require("../services/razorpayService");
+const crypto = require("crypto");
 const { sendOrderConfirmationEmail } = require("../services/emailService");
 const { predictWaitTime } = require("../services/mlPredictionService");
 const { calculatePaymentAmount, verifyRazorpaySignature } = require("../services/paymentUtils");
@@ -52,9 +53,11 @@ async function initiatePayment(req, res) {
         ![1, 2, 4].includes(sheetCount)) {
       return res.status(400).json({ success: false, error: "Invalid page, copy, or pages-per-sheet count" });
     }
-    if (!["B&W", "Color"].includes(color) || !["Single", "Double"].includes(sides) ||
-        !["Portrait", "Landscape"].includes(orientation)) {
-      return res.status(400).json({ success: false, error: "Invalid print configuration" });
+    if (files.some(f => !f.config)) {
+      if (!["B&W", "Color"].includes(color) || !["Single", "Double"].includes(sides) ||
+          !["Portrait", "Landscape"].includes(orientation)) {
+        return res.status(400).json({ success: false, error: "Invalid print configuration" });
+      }
     }
 
     const vendor = await Vendor.findById(vendorId);
@@ -62,8 +65,40 @@ async function initiatePayment(req, res) {
       return res.status(400).json({ success: false, error: "Vendor is unavailable" });
     }
 
-    const rate = color === "Color" ? vendor.colorPricePerPage : vendor.bwPricePerPage;
-    const amount = calculatePaymentAmount({ pages, copies, pagesPerSheet: sheetCount, ratePerPage: rate });
+    let calculatedAmount = 0;
+    
+    if (files.length > 0 && files[0].config) {
+      files.forEach(f => {
+        const c = f.config;
+        const rate = c.color === "Color" ? vendor.colorPricePerPage : vendor.bwPricePerPage;
+        
+        let pgs = c.totalDocPages || 1;
+        if (c.pageOption === "Custom" && c.customPages) {
+          let count = 0;
+          c.customPages.split(",").forEach(p => {
+            p = p.trim();
+            if (p.includes("-")) {
+              const [a, b] = p.split("-").map(Number);
+              if (!isNaN(a) && !isNaN(b) && b >= a) count += b - a + 1;
+            } else {
+              if (!isNaN(Number(p)) && p !== "") count += 1;
+            }
+          });
+          pgs = count || pgs;
+        }
+        calculatedAmount += calculatePaymentAmount({ 
+          pages: pgs, 
+          copies: c.quantity || 1, 
+          pagesPerSheet: c.pagesPerSheet || 1, 
+          ratePerPage: rate 
+        });
+      });
+    } else {
+      const rate = color === "Color" ? vendor.colorPricePerPage : vendor.bwPricePerPage;
+      calculatedAmount = calculatePaymentAmount({ pages, copies, pagesPerSheet: sheetCount, ratePerPage: rate });
+    }
+
+    const amount = calculatedAmount;
     if (!Number.isSafeInteger(amount) || amount < 100) {
       return res.status(400).json({ success: false, error: "Calculated payment amount is invalid" });
     }

@@ -1,16 +1,15 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { signOut } from "firebase/auth";
-import { auth } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 
 export default function UserNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, checkAuth } = useAuth();
 
   const handleLogout = async () => {
-    await signOut(auth);
+    localStorage.removeItem("userToken");
+    await checkAuth(); // Trigger context update
     toast.success("Logged out");
     navigate("/");
   };
@@ -18,7 +17,6 @@ export default function UserNavbar() {
   const links = [
     { label: "📤 Upload", path: "/upload" },
     { label: "📦 My Orders", path: "/my-orders" },
-    { label: "🛡️ Admin", path: "/admin" },
   ];
 
   return (

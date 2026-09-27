@@ -7,26 +7,29 @@ import socket from "../../services/socket";
 export default function VendorLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {const res = await vendorLogin({ email, password });
-const { token, vendor } = res.data;
+    try {
+      const res = await vendorLogin({ email, password });
+      const { token, vendor } = res.data;
 
-if (!vendor?.vendorId) {
-  throw new Error("Invalid vendor data");
-}
+      if (!vendor?.vendorId) {
+        throw new Error("Invalid vendor data");
+      }
 
-localStorage.setItem("vendorToken", token);
-localStorage.setItem("vendorData", JSON.stringify(vendor));
+      localStorage.setItem("vendorToken", token);
+      localStorage.setItem("vendorData", JSON.stringify(vendor));
 
-socket.emit("vendor-online", vendor.vendorId);
+      socket.emit("vendor-online", vendor.vendorId);
 
-toast.success(`Welcome, ${vendor.name}! 🏪`);
-navigate("/vendor/dashboard");} catch (err) {
+      toast.success(`Welcome, ${vendor.name}! 🏪`);
+      navigate("/vendor/dashboard");
+    } catch (err) {
       toast.error(err.response?.data?.error || "Login failed");
     } finally {
       setLoading(false);
@@ -54,15 +57,39 @@ navigate("/vendor/dashboard");} catch (err) {
           </div>
           <div className="form-group">
             <label className="input-label">Password</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                className="input"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                style={{ paddingRight: 40 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  color: "var(--gray-400)",
+                  fontSize: "1rem",
+                  lineHeight: 1,
+                }}
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
           <button className="btn btn-success btn-full" type="submit" disabled={loading} style={{ marginTop: 8 }}>
             {loading ? "Signing in..." : "Sign In as Vendor"}

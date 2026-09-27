@@ -1,20 +1,31 @@
 // src/services/api.js
 import axios from "axios";
-import { auth } from "../firebase";
 
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const api = axios.create({ baseURL: BASE_URL });
 
-// Attach vendor or admin JWT token to every request if present
+// Attach token to every request if present
 api.interceptors.request.use(async (config) => {
-  let token = localStorage.getItem("vendorToken") || localStorage.getItem("adminToken");
-  if (!token && auth.currentUser) {
-    token = await auth.currentUser.getIdToken();
+  let token = null;
+  const url = config.url || "";
+  
+  if (url.startsWith("/vendor") || url.startsWith("/orders/queue") || url.includes("verify-otp")) {
+    token = localStorage.getItem("vendorToken") || localStorage.getItem("adminToken");
+  } else if (url.includes("/admin") || url.startsWith("/api/analytics")) {
+    token = localStorage.getItem("adminToken");
+  } else {
+    token = localStorage.getItem("userToken") || localStorage.getItem("vendorToken") || localStorage.getItem("adminToken");
   }
+  
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// ─── USER ────────────────────────────────────────────────
+export const userRegister = (data) => api.post("/api/auth/register", data);
+export const userLogin = (data) => api.post("/api/auth/login", data);
+export const getUserProfile = () => api.get("/api/auth/me");
 
 // ─── VENDOR ──────────────────────────────────────────────
 export const vendorRegister = (data) => api.post("/vendor/register", data);

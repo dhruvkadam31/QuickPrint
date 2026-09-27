@@ -5,6 +5,7 @@ import { loginAdmin } from "../../services/api";
 
 export default function AdminLogin() {
   const [passphrase, setPassphrase] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -66,7 +67,7 @@ export default function AdminLogin() {
             QuickPrint Admin Portal
           </h2>
           <p className="text-muted" style={{ fontSize: "0.85rem" }}>
-            Restricted access for system administrators & campus operations.
+            Restricted access for system administrators &amp; campus operations.
           </p>
         </div>
 
@@ -75,16 +76,39 @@ export default function AdminLogin() {
             <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: 6 }}>
               Administrator Passphrase
             </label>
-            <input
-              type="password"
-              className="input"
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0" }}
-              placeholder="••••••••••••"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              required
-              autoFocus
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPass ? "text" : "password"}
+                className="input"
+                style={{ width: "100%", padding: "10px 44px 10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", boxSizing: "border-box" }}
+                placeholder="••••••••••••"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                required
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass((s) => !s)}
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  color: "#94a3b8",
+                  fontSize: "1rem",
+                  lineHeight: 1,
+                }}
+                tabIndex={-1}
+                aria-label={showPass ? "Hide passphrase" : "Show passphrase"}
+              >
+                {showPass ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
 
           <button

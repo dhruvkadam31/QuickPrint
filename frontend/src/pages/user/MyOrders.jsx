@@ -160,7 +160,7 @@ export default function MyOrders() {
 
           {filtered.map((o) => {
             const sc = STATUS_CONFIG[o.status] || STATUS_CONFIG.Queued;
-            const canCancel = ["Queued", "Printing"].includes(o.status);
+            const canCancel = o.status === "Queued";
 
             return (
               <div key={o.orderId} className="order-item" style={{ position: "relative" }}>

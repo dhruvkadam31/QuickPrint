@@ -95,15 +95,15 @@ async function predictWaitTime({ vendorId, jobPages = 1, color = "B&W", sides = 
     predicted_demand: clamp((demand.prediction.peak_level || 0) * 39, 5, 39),
   };
 
+  const BUFFER_MINUTES = 10;
+
   try {
     const response = await axios.post(
       process.env.ML_WAITTIME_URL || "http://127.0.0.1:8001/predict",
       payload,
       { timeout: 3000 }
     );
-    return { ...response.data, source: "model", queue_length: payload.queue_length };
-  } catch (error) {
-    const estimated = estimateQueueWaitMinutes({
+    const rawEstimated = estimateQueueWaitMinutes({
       backlogPages: snapshot.backlogPages,
       jobPages: Number(jobPages || 1),
       activePrinters: snapshot.activePrinters,
@@ -111,10 +111,33 @@ async function predictWaitTime({ vendorId, jobPages = 1, color = "B&W", sides = 
       color,
       sides,
     });
+    
+    // If ML underpredicts significantly compared to raw math (queue size), trust the math more
+    const mlWait = response.data.estimated_wait_minutes || 0;
+    const effectiveWait = Math.max(mlWait, rawEstimated);
+    
+    const finalWait = Number((effectiveWait + BUFFER_MINUTES).toFixed(1));
+    return { 
+      ...response.data, 
+      estimated_wait_minutes: finalWait,
+      message_to_student: `Your order will be ready in about ${finalWait} minutes (includes 10m buffer).`,
+      source: mlWait < rawEstimated ? "model-adjusted" : "model", 
+      queue_length: payload.queue_length 
+    };
+  } catch (error) {
+    const rawEstimated = estimateQueueWaitMinutes({
+      backlogPages: snapshot.backlogPages,
+      jobPages: Number(jobPages || 1),
+      activePrinters: snapshot.activePrinters,
+      printerSpeedPpm: snapshot.printerSpeedPpm,
+      color,
+      sides,
+    });
+    const finalWait = Number((rawEstimated + BUFFER_MINUTES).toFixed(1));
     return {
-      estimated_wait_minutes: estimated,
-      message_to_student: `Estimated wait is about ${estimated} minutes from the live queue and configured printer capacity.`,
-      urgency: estimated > 20 ? "High" : estimated > 10 ? "Medium" : "Low",
+      estimated_wait_minutes: finalWait,
+      message_to_student: `Estimated wait is about ${finalWait} minutes (includes 10m buffer).`,
+      urgency: finalWait > 20 ? "High" : finalWait > 10 ? "Medium" : "Low",
       advice: "Prediction model unavailable; using a queue-based estimate.",
       source: "queue-fallback",
       queue_length: payload.queue_length,

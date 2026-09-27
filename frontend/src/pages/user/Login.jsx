@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-} from "firebase/auth";
-import { auth } from "../../firebase";
+import { userRegister, userLogin } from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 
 export default function UserLogin() {
@@ -16,6 +12,7 @@ export default function UserLogin() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { checkAuth } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,17 +25,24 @@ export default function UserLogin() {
           setLoading(false);
           return;
         }
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, { displayName: name });
+        const res = await userRegister({ name, email, password });
+        localStorage.removeItem("vendorToken");
+        localStorage.removeItem("adminToken");
+        localStorage.setItem("userToken", res.data.token);
+        await checkAuth();
         toast.success("Account created! Welcome 🎉");
         navigate("/upload");
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const res = await userLogin({ email, password });
+        localStorage.removeItem("vendorToken");
+        localStorage.removeItem("adminToken");
+        localStorage.setItem("userToken", res.data.token);
+        await checkAuth();
         toast.success("Welcome back!");
         navigate("/upload");
       }
     } catch (err) {
-      toast.error(err.message.replace("Firebase: ", "").replace(/\(auth.*\)/, "").trim());
+      toast.error(err.response?.data?.error || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -105,32 +109,22 @@ export default function UserLogin() {
             />
           </div>
 
-          <div className="form-group">
-            <label className="input-label">Password</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
+          <PasswordField
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            disabled={loading}
+          />
 
           {tab === "signup" && (
-            <div className="form-group">
-              <label className="input-label">Confirm Password</label>
-              <input
-                className="input"
-                type="password"
-                placeholder="••••••••"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
+            <PasswordField
+              label="Confirm Password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="••••••••"
+              disabled={loading}
+            />
           )}
 
           <button className="btn btn-primary btn-full" type="submit" disabled={loading} style={{ marginTop: 8 }}>
@@ -148,6 +142,59 @@ export default function UserLogin() {
             Vendor Login →
           </button>
         </div>
+
+        <div style={{ textAlign: "center", marginTop: 8 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--gray-400)" }}
+            onClick={() => navigate("/admin/login")}
+          >
+            Admin Access
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reusable password field with eye toggle ──────────────────
+function PasswordField({ label, value, onChange, placeholder, disabled }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="form-group">
+      <label className="input-label">{label}</label>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input"
+          type={show ? "text" : "password"}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          required
+          disabled={disabled}
+          style={{ paddingRight: 40 }}
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          style={{
+            position: "absolute",
+            right: 10,
+            top: "50%",
+            transform: "translateY(-50%)",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            color: "var(--gray-400)",
+            fontSize: "1rem",
+            lineHeight: 1,
+          }}
+          tabIndex={-1}
+          aria-label={show ? "Hide password" : "Show password"}
+        >
+          {show ? "🙈" : "👁️"}
+        </button>
       </div>
     </div>
   );

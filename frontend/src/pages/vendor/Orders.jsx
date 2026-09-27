@@ -8,47 +8,68 @@ const TABS = ["Queued", "Printing", "Ready", "Picked Up"];
 
 // 🔥 Clean print instructions block for vendor
 function PrintInstructions({ order }) {
-  const cfg = order.printConfig;
-
-  // Fallback to legacy fields if printConfig not present
-  const pages = cfg
-    ? cfg.pageOption === "Custom"
-      ? cfg.customPages || "Custom"
-      : `All (${order.pageCount})`
-    : `All (${order.pageCount})`;
-
-  const pagesPerSheet = cfg?.pagesPerSheet ?? 1;
-  const copies = cfg?.copies ?? order.quantity;
-  const color = cfg?.color ?? order.color;
-  const sides = cfg?.sides ?? order.sides;
-  const orientation = cfg?.orientation ?? order.orientation;
+  const files = Array.isArray(order.files) && order.files.length > 0 ? order.files : [{ config: order.printConfig, originalName: order.originalFileName || "File" }];
 
   return (
-    <div
-      style={{
-        background: "#f8faff",
-        border: "1.5px solid #c7d8fa",
-        borderRadius: 10,
-        padding: "14px 16px",
-        marginBottom: 12,
-        fontFamily: "monospace",
-        fontSize: "0.9rem",
-        lineHeight: 1.8,
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: "0.78rem", letterSpacing: 1, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>
-        🖨️ Print Instructions
-      </div>
-      <div>• <strong>Pages:</strong> {pages}</div>
-      <div>• <strong>Pages/Sheet:</strong> {pagesPerSheet}</div>
-      <div>• <strong>Copies:</strong> {copies}</div>
-      <div>• <strong>Color:</strong> {color}</div>
-      <div>• <strong>Sides:</strong> {sides}</div>
-      <div>• <strong>Orientation:</strong> {orientation}</div>
-      {order.instructions ? (
-        <div>• <strong>Note:</strong> {order.instructions}</div>
-      ) : null}
-    </div>
+    <>
+      {files.map((file, idx) => {
+        const cfg = file.config || order.printConfig;
+        
+        // Fallback to legacy fields if printConfig not present
+        const pages = cfg
+          ? cfg.pageOption === "Custom"
+            ? cfg.customPages || "Custom"
+            : `All (${cfg.totalDocPages || order.pageCount || 1})`
+          : `All (${order.pageCount})`;
+
+        const pagesPerSheet = cfg?.pagesPerSheet ?? 1;
+        const copies = cfg?.quantity ?? cfg?.copies ?? order.quantity;
+        const color = cfg?.color ?? order.color;
+        const sides = cfg?.sides ?? order.sides;
+        const orientation = cfg?.orientation ?? order.orientation;
+        const instructions = cfg?.instructions ?? order.instructions;
+
+        return (
+          <div
+            key={idx}
+            style={{
+              background: "#f8faff",
+              border: "1.5px solid #c7d8fa",
+              borderRadius: 10,
+              padding: "14px 16px",
+              marginBottom: 12,
+              fontFamily: "monospace",
+              fontSize: "0.9rem",
+              lineHeight: 1.8,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: "0.78rem", letterSpacing: 1, color: "#6b7280", marginBottom: 8, textTransform: "uppercase" }}>
+              🖨️ Print Instructions: {file.originalName || `File ${idx + 1}`}
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+              <a
+                href={file.fileUrl || file.url || order.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+                style={{ fontSize: "0.8rem", padding: "4px 8px", border: "1px solid #e2e8f0" }}
+              >
+                📄 View / Download
+              </a>
+            </div>
+            <div>• <strong>Pages:</strong> {pages}</div>
+            <div>• <strong>Pages/Sheet:</strong> {pagesPerSheet}</div>
+            <div>• <strong>Copies:</strong> {copies}</div>
+            <div>• <strong>Color:</strong> {color}</div>
+            <div>• <strong>Sides:</strong> {sides}</div>
+            <div>• <strong>Orientation:</strong> {orientation}</div>
+            {instructions ? (
+              <div>• <strong>Note:</strong> {instructions}</div>
+            ) : null}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -201,17 +222,32 @@ export default function VendorOrders() {
             </span>
           </div>
 
-          {/* File link */}
-          <div style={{ marginBottom: 12 }}>
-            <a
-              href={order.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-ghost"
-              style={{ fontSize: "0.85rem", padding: "6px 12px" }}
-            >
-              📄 View / Download File
-            </a>
+          {/* File link(s) */}
+          <div style={{ marginBottom: 12, display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {Array.isArray(order.files) && order.files.length > 0 ? (
+              order.files.map((file, idx) => (
+                <a
+                  key={idx}
+                  href={file.fileUrl || file.url} // Try multiple properties in case backend returns differently
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-ghost"
+                  style={{ fontSize: "0.85rem", padding: "6px 12px", border: "1px solid #e2e8f0" }}
+                >
+                  📄 File {idx + 1}
+                </a>
+              ))
+            ) : (
+              <a
+                href={order.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+                style={{ fontSize: "0.85rem", padding: "6px 12px", border: "1px solid #e2e8f0" }}
+              >
+                📄 View / Download File
+              </a>
+            )}
           </div>
 
           {/* Action Buttons */}

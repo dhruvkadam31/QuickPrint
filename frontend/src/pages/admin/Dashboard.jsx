@@ -400,6 +400,59 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Create Vendor Form */}
+                <div style={{ marginTop: 32, padding: 24, background: "white", borderRadius: 12, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+                  <h3 style={{ marginBottom: 20 }}>➕ Register New Vendor</h3>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.target;
+                      const data = {
+                        name: form.name.value,
+                        email: form.email.value,
+                        password: form.password.value,
+                        shopName: form.shopName.value,
+                        phone: form.phone.value,
+                      };
+                      try {
+                        const { vendorRegister } = await import("../../services/api");
+                        await vendorRegister(data);
+                        toast.success("Vendor created successfully!");
+                        form.reset();
+                      } catch (err) {
+                        toast.error(err.response?.data?.error || "Failed to create vendor");
+                      }
+                    }}
+                    style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}
+                  >
+                    <div>
+                      <label className="input-label">Owner Name</label>
+                      <input name="name" className="input" type="text" required placeholder="John Doe" />
+                    </div>
+                    <div>
+                      <label className="input-label">Shop Name</label>
+                      <input name="shopName" className="input" type="text" required placeholder="QuickPrint Campus" />
+                    </div>
+                    <div>
+                      <label className="input-label">Login Email</label>
+                      <input name="email" className="input" type="email" required placeholder="vendor@example.com" />
+                    </div>
+                    <div>
+                      <label className="input-label">Login Password</label>
+                      <input name="password" className="input" type="password" required placeholder="••••••••" minLength={6} />
+                    </div>
+                    <div>
+                      <label className="input-label">Phone Number</label>
+                      <input name="phone" className="input" type="text" placeholder="9876543210" />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "flex-end" }}>
+                      <button className="btn btn-primary btn-full" type="submit" style={{ height: "42px" }}>
+                        Create Vendor
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </>

@@ -31,36 +31,59 @@ function parseCustomPages(str) {
   return count;
 }
 
+// Session storage hook to prevent state loss on refresh
+function useSessionState(key, initialValue) {
+  const [state, setState] = useState(() => {
+    try {
+      const item = window.sessionStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(key, JSON.stringify(state));
+    } catch (error) {
+      console.warn("SessionStorage error", error);
+    }
+  }, [key, state]);
+
+  return [state, setState];
+}
+
 export default function Upload() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState(0);
-  const [files, setFiles] = useState([]);
-  const [processedFiles, setProcessedFiles] = useState([]);
-  const [fileUrl, setFileUrl] = useState("");
-  const [originalFileName, setOriginalFileName] = useState("");
-  const [processedUrl, setProcessedUrl] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
-  const [metadata, setMetadata] = useState(null);
+  const [step, setStep] = useSessionState("qp_step", 0);
+  const [files, setFiles] = useState([]); // Native File objects can't be stringified
+  const [processedFiles, setProcessedFiles] = useSessionState("qp_processedFiles", []);
+  const [fileUrl, setFileUrl] = useSessionState("qp_fileUrl", "");
+  const [originalFileName, setOriginalFileName] = useSessionState("qp_originalFileName", "");
+  const [processedUrl, setProcessedUrl] = useSessionState("qp_processedUrl", "");
+  const [thumbnailUrl, setThumbnailUrl] = useSessionState("qp_thumbnailUrl", "");
+  const [metadata, setMetadata] = useSessionState("qp_metadata", null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Config
-  const [serviceType, setServiceType] = useState("Print");
-  const [pageOption, setPageOption] = useState("All");
-  const [customPages, setCustomPages] = useState("");
-  const [totalDocPages, setTotalDocPages] = useState(1); // total pages in doc
-  const [pagesPerSheet, setPagesPerSheet] = useState(1);
-  const [quantity, setQuantity] = useState(1);
-  const [color, setColor] = useState("B&W");
-  const [sides, setSides] = useState("Single");
-  const [orientation, setOrientation] = useState("Portrait");
-  const [instructions, setInstructions] = useState("");
+  // Per-file Config
+  const [fileConfigs, setFileConfigs] = useSessionState("qp_fileConfigs", []);
+  const [activeFileIdx, setActiveFileIdx] = useSessionState("qp_activeFileIdx", 0);
+
+  const activeConfig = fileConfigs[activeFileIdx] || {};
+  const updateConfig = (key, value) => {
+    setFileConfigs((prev) => {
+      const next = [...prev];
+      next[activeFileIdx] = { ...next[activeFileIdx], [key]: value };
+      return next;
+    });
+  };
 
   // Vendor
   const [vendors, setVendors] = useState([]);
-  const [selectedVendor, setSelectedVendor] = useState(null);
+  const [selectedVendor, setSelectedVendor] = useSessionState("qp_selectedVendor", null);
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [waitTimeData, setWaitTimeData] = useState({});
   // Payment
@@ -70,23 +93,29 @@ export default function Upload() {
 
   const fileInputRef = useRef();
 
-  // Compute effective page count
-  const effectivePageCount =
-    pageOption === "All" ? totalDocPages : parseCustomPages(customPages) || 0;
-
-  // Pages printed = ceil(effectivePageCount / pagesPerSheet)
-  const printedSheets = Math.ceil(effectivePageCount / pagesPerSheet) || 0;
-
-  const pricePerPage = selectedVendor
-    ? color === "Color"
+  const getPricePerPage = (c) => selectedVendor
+    ? c === "Color"
       ? selectedVendor.colorPricePerPage
       : selectedVendor.bwPricePerPage
-    : color === "Color"
+    : c === "Color"
     ? 5
     : 1.5;
 
-  const totalSheets = printedSheets * quantity;
-  const estimatedPrice = +(totalSheets * pricePerPage).toFixed(2);
+  let effectivePageCount = 0;
+  let totalSheets = 0;
+  let estimatedPrice = 0;
+
+  fileConfigs.forEach(cfg => {
+    const pages = cfg.pageOption === "All" ? cfg.totalDocPages : (parseCustomPages(cfg.customPages) || 0);
+    effectivePageCount += (pages * cfg.quantity);
+    
+    const sheets = Math.ceil(pages / cfg.pagesPerSheet) || 0;
+    const itemTotalSheets = sheets * cfg.quantity;
+    totalSheets += itemTotalSheets;
+    
+    estimatedPrice += itemTotalSheets * getPricePerPage(cfg.color);
+  });
+  estimatedPrice = +estimatedPrice.toFixed(2);
 
   // Step 3: load vendors
   useEffect(() => {
@@ -103,9 +132,9 @@ export default function Upload() {
             try {
               const waitRes = await getWaitTimePrediction({
                 vendorId: vendor._id,
-                jobPages: effectivePageCount * quantity,
-                color,
-                sides,
+                jobPages: effectivePageCount,
+                color: "B&W",
+                sides: "Single",
               });
               waitResults[vendor._id] = waitRes.data.ml_response;
             } catch {
@@ -136,13 +165,17 @@ export default function Upload() {
   const handleFileChange = (selection) => {
     const selected = Array.from(selection || []);
     if (!selected.length) return;
-    if (selected.length > 10) {
-      toast.error("Select no more than 10 files per order");
-      return;
-    }
-    setFiles(selected);
-    setProcessedFiles([]);
-    setFileUrl("");
+    
+    setFiles((prev) => {
+      const newFiles = [...prev, ...selected];
+      if (newFiles.length > 10) {
+        toast.error("Select no more than 10 files per order");
+        return prev;
+      }
+      setProcessedFiles([]);
+      setFileUrl("");
+      return newFiles;
+    });
   };
 
   const handleUpload = async () => {
@@ -157,9 +190,21 @@ export default function Upload() {
 
       // Set processed file data
       setProcessedFiles(uploadedFiles);
+      setFileConfigs(uploadedFiles.map(f => ({
+        serviceType: "Print",
+        pageOption: "All",
+        customPages: "",
+        totalDocPages: f.pageCount || 1,
+        pagesPerSheet: 1,
+        quantity: 1,
+        color: "B&W",
+        sides: "Single",
+        orientation: "Portrait",
+        instructions: ""
+      })));
+      setActiveFileIdx(0);
       setFileUrl(firstFile?.fileUrl || res.data.fileUrl || "");
       setOriginalFileName(firstFile?.originalName || res.data.originalName || files[0].name);
-      setTotalDocPages(res.data.pageCount || 1); // Automatically detected page count
       setProcessedUrl(res.data.processedUrl || "");
       setThumbnailUrl(res.data.thumbnailUrl || "");
       setMetadata(res.data.metadata || null);
@@ -188,29 +233,25 @@ export default function Upload() {
 
     setPaying(true);
     try {
-      const printConfig = {
-        pageOption,
-        customPages: pageOption === "Custom" ? customPages : "",
-        pagesPerSheet,
-        copies: quantity,
-        color,
-        sides,
-        orientation,
-      };
+      const fileSettings = fileConfigs.map(c => ({
+        ...c,
+        customPages: c.pageOption === "Custom" ? c.customPages : ""
+      }));
+      
       const initiation = await initiatePayment({
         vendorId: selectedVendor._id,
         fileUrl,
-        files: processedFiles,
+        files: processedFiles.map((f, i) => ({ ...f, config: fileSettings[i] })),
         originalFileName,
-        serviceType,
+        serviceType: fileSettings[0]?.serviceType || "Print",
         pageCount: effectivePageCount,
-        quantity,
-        pagesPerSheet,
-        color,
-        sides,
-        orientation,
-        instructions,
-        printConfig,
+        quantity: 1,
+        pagesPerSheet: 1,
+        color: "B&W",
+        sides: "Single",
+        orientation: "Portrait",
+        instructions: "Multiple file order",
+        printConfig: fileSettings[0] || {},
         processedUrl,
         thumbnailUrl,
         metadata,
@@ -223,6 +264,7 @@ export default function Upload() {
         });
         setOrderDone(result.data);
         toast.success("Order placed in development payment mode");
+        window.sessionStorage.clear(); // Clear storage on success
         return;
       }
 
@@ -236,6 +278,10 @@ export default function Upload() {
         currency: initiation.data.currency,
         order_id: initiation.data.razorpayOrderId,
         name: "QuickPrint",
+        prefill: {
+          name: user?.name || "Customer",
+          email: user?.email || "customer@example.com"
+        },
         handler: async (response) => {
           try {
             const result = await verifyPayment({
@@ -246,6 +292,7 @@ export default function Upload() {
             });
             setOrderDone(result.data);
             toast.success("Order placed");
+            window.sessionStorage.clear(); // Clear storage on success
           } catch (error) {
             toast.error(error.response?.data?.error || "Payment verification failed");
           } finally {
@@ -386,12 +433,28 @@ export default function Upload() {
                 onChange={(e) => handleFileChange(e.target.files)}
               />
               {files.length ? (
-                <div>
+                <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
                   <div style={{ fontSize: "2rem", marginBottom: 8 }}>📄</div>
                   <p style={{ fontWeight: 600 }}>{files.length} file(s) selected</p>
-                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+                  <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 16 }}>
                     {files.map((file) => file.name).join(", ")}
                   </p>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      className="btn btn-gray"
+                      style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                      onClick={() => setFiles([])}
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ fontSize: "0.8rem", padding: "6px 12px", background: "var(--brand-light)", color: "var(--brand)" }}
+                      onClick={() => fileInputRef.current.click()}
+                    >
+                      + Add More Files
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -420,13 +483,36 @@ export default function Upload() {
         {step === 1 && (
           <div className="card">
             <h3 style={{ marginBottom: 4 }}>🖨️ Print Settings</h3>
+            
+            {processedFiles.length > 1 && (
+              <div style={{ display: "flex", overflowX: "auto", gap: 8, paddingBottom: 12, marginBottom: 16, borderBottom: "1px solid #e2e8f0" }}>
+                {processedFiles.map((pf, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveFileIdx(idx)}
+                    style={{
+                      whiteSpace: "nowrap",
+                      padding: "6px 12px",
+                      borderRadius: "20px",
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      border: activeFileIdx === idx ? "none" : "1px solid #cbd5e1",
+                      background: activeFileIdx === idx ? "var(--brand)" : "white",
+                      color: activeFileIdx === idx ? "white" : "var(--gray-600)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {pf.originalName.length > 15 ? pf.originalName.slice(0,15) + "..." : pf.originalName}
+                  </button>
+                ))}
+              </div>
+            )}
+            
             <p
               className="text-muted"
-              style={{ fontSize: "0.85rem", marginBottom: 20 }}
+              style={{ fontSize: "0.85rem", marginBottom: 20, fontWeight: 600 }}
             >
-              {processedFiles.length > 1
-                ? `${originalFileName} and ${processedFiles.length - 1} more`
-                : originalFileName}
+              Configuring: {processedFiles[activeFileIdx]?.originalName}
             </p>
 
             {/* Service Type */}
@@ -434,8 +520,8 @@ export default function Upload() {
               <label className="input-label">Service Type</label>
               <select
                 className="input"
-                value={serviceType}
-                onChange={(e) => setServiceType(e.target.value)}
+                value={activeConfig.serviceType || ""}
+                onChange={(e) => updateConfig("serviceType", e.target.value)}
               >
                 <option>Print</option>
                 <option>Lamination</option>
@@ -451,19 +537,19 @@ export default function Upload() {
                 {["All", "Custom"].map((opt) => (
                   <button
                     key={opt}
-                    onClick={() => setPageOption(opt)}
+                    onClick={() => updateConfig("pageOption", opt)}
                     style={{
                       flex: 1,
                       padding: "8px 0",
                       borderRadius: 6,
                       border:
-                        pageOption === opt
+                        activeConfig.pageOption === opt
                           ? "2px solid var(--brand)"
                           : "1.5px solid var(--gray-200)",
                       background:
-                        pageOption === opt ? "var(--brand-light)" : "white",
+                        activeConfig.pageOption === opt ? "var(--brand-light)" : "white",
                       color:
-                        pageOption === opt ? "var(--brand)" : "var(--gray-600)",
+                        activeConfig.pageOption === opt ? "var(--brand)" : "var(--gray-600)",
                       fontWeight: 600,
                       fontSize: "0.88rem",
                       cursor: "pointer",
@@ -474,7 +560,7 @@ export default function Upload() {
                 ))}
               </div>
 
-              {pageOption === "All" && (
+              {activeConfig.pageOption === "All" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <label
                     className="input-label"
@@ -486,29 +572,29 @@ export default function Upload() {
                     className="input"
                     type="number"
                     min={1}
-                    value={totalDocPages}
+                    value={activeConfig.totalDocPages || 1}
                     onChange={(e) =>
-                      setTotalDocPages(Math.max(1, +e.target.value))
+                      updateConfig("totalDocPages", Math.max(1, +e.target.value))
                     }
                     style={{ width: 80 }}
                   />
                 </div>
               )}
 
-              {pageOption === "Custom" && (
+              {activeConfig.pageOption === "Custom" && (
                 <div>
                   <input
                     className="input"
                     type="text"
                     placeholder="e.g. 1,3,5-8"
-                    value={customPages}
-                    onChange={(e) => setCustomPages(e.target.value)}
+                    value={activeConfig.customPages || ""}
+                    onChange={(e) => updateConfig("customPages", e.target.value)}
                   />
                   <p
                     className="text-muted"
                     style={{ fontSize: "0.8rem", marginTop: 4 }}
                   >
-                    Use commas and ranges · {parseCustomPages(customPages)}{" "}
+                    Use commas and ranges · {parseCustomPages(activeConfig.customPages || "")}{" "}
                     page(s) selected
                   </p>
                 </div>
@@ -522,19 +608,19 @@ export default function Upload() {
                 {[1, 2, 4].map((n) => (
                   <button
                     key={n}
-                    onClick={() => setPagesPerSheet(n)}
+                    onClick={() => updateConfig("pagesPerSheet", n)}
                     style={{
                       flex: 1,
                       padding: "8px 0",
                       borderRadius: 6,
                       border:
-                        pagesPerSheet === n
+                        activeConfig.pagesPerSheet === n
                           ? "2px solid var(--brand)"
                           : "1.5px solid var(--gray-200)",
                       background:
-                        pagesPerSheet === n ? "var(--brand-light)" : "white",
+                        activeConfig.pagesPerSheet === n ? "var(--brand-light)" : "white",
                       color:
-                        pagesPerSheet === n
+                        activeConfig.pagesPerSheet === n
                           ? "var(--brand)"
                           : "var(--gray-600)",
                       fontWeight: 600,
@@ -555,7 +641,7 @@ export default function Upload() {
                 <button
                   className="btn btn-gray"
                   style={{ padding: "6px 14px", fontSize: "1.1rem" }}
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  onClick={() => updateConfig("quantity", Math.max(1, (activeConfig.quantity || 1) - 1))}
                 >
                   −
                 </button>
@@ -567,12 +653,12 @@ export default function Upload() {
                     textAlign: "center",
                   }}
                 >
-                  {quantity}
+                  {activeConfig.quantity || 1}
                 </span>
                 <button
                   className="btn btn-gray"
                   style={{ padding: "6px 14px", fontSize: "1.1rem" }}
-                  onClick={() => setQuantity(quantity + 1)}
+                  onClick={() => updateConfig("quantity", (activeConfig.quantity || 1) + 1)}
                 >
                   +
                 </button>
@@ -591,8 +677,8 @@ export default function Upload() {
                 <label className="input-label">Color</label>
                 <select
                   className="input"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
+                  value={activeConfig.color || ""}
+                  onChange={(e) => updateConfig("color", e.target.value)}
                 >
                   <option>B&W</option>
                   <option>Color</option>
@@ -602,8 +688,8 @@ export default function Upload() {
                 <label className="input-label">Sides</label>
                 <select
                   className="input"
-                  value={sides}
-                  onChange={(e) => setSides(e.target.value)}
+                  value={activeConfig.sides || ""}
+                  onChange={(e) => updateConfig("sides", e.target.value)}
                 >
                   <option>Single</option>
                   <option>Double</option>
@@ -613,8 +699,8 @@ export default function Upload() {
                 <label className="input-label">Orientation</label>
                 <select
                   className="input"
-                  value={orientation}
-                  onChange={(e) => setOrientation(e.target.value)}
+                  value={activeConfig.orientation || ""}
+                  onChange={(e) => updateConfig("orientation", e.target.value)}
                 >
                   <option>Portrait</option>
                   <option>Landscape</option>
@@ -631,8 +717,8 @@ export default function Upload() {
                 className="input"
                 type="text"
                 placeholder="e.g. staple, spiral bind..."
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
+                value={activeConfig.instructions || ""}
+                onChange={(e) => updateConfig("instructions", e.target.value)}
               />
             </div>
 
@@ -645,18 +731,6 @@ export default function Upload() {
                 marginBottom: 16,
               }}
             >
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  color: "var(--gray-500)",
-                  marginBottom: 6,
-                }}
-              >
-                {effectivePageCount} pages ÷ {pagesPerSheet}/sheet ={" "}
-                {printedSheets} sheet(s) × {quantity} cop
-                {quantity > 1 ? "ies" : "y"} = {totalSheets} sheet(s) × ₹
-                {pricePerPage}
-              </div>
               <div className="flex-between">
                 <span style={{ fontWeight: 600 }}>Estimated Total</span>
                 <span
@@ -834,38 +908,18 @@ export default function Upload() {
                 marginBottom: 16,
               }}
             >
-              {[
-                ["File", originalFileName],
-                ["Documents", String(processedFiles.length || 1)],
-                ["Service", serviceType],
-                [
-                  "Pages",
-                  pageOption === "All" ? `All (${totalDocPages})` : customPages,
-                ],
-                ["Pages/Sheet", pagesPerSheet],
-                ["Copies", quantity],
-                ["Color", color],
-                ["Sides", sides],
-                ["Orientation", orientation],
-                ["Vendor", selectedVendor?.shopName],
-              ].map(([k, v]) => (
-                <div
-                  key={k}
-                  className="flex-between"
-                  style={{ marginBottom: 8 }}
-                >
-                  <span className="text-muted">{k}</span>
-                  <strong>{v}</strong>
-                </div>
-              ))}
-              {instructions && (
-                <div className="flex-between" style={{ marginBottom: 8 }}>
-                  <span className="text-muted">Instructions</span>
-                  <strong style={{ maxWidth: "60%", textAlign: "right" }}>
-                    {instructions}
-                  </strong>
-                </div>
-              )}
+              <div className="flex-between" style={{ marginBottom: 8 }}>
+                  <span className="text-muted">Total Documents</span>
+                  <strong>{processedFiles.length || 1}</strong>
+              </div>
+              <div className="flex-between" style={{ marginBottom: 8 }}>
+                  <span className="text-muted">Total Pages (Effective)</span>
+                  <strong>{effectivePageCount}</strong>
+              </div>
+              <div className="flex-between" style={{ marginBottom: 8 }}>
+                  <span className="text-muted">Vendor</span>
+                  <strong>{selectedVendor?.shopName}</strong>
+              </div>
               <hr
                 style={{
                   border: "none",
@@ -925,9 +979,22 @@ export default function Upload() {
                   style={{
                     fontSize: "0.85rem",
                     color: "var(--gray-600)",
+                    marginBottom: 8,
                   }}
                 >
                   {waitTimeData[selectedVendor._id].advice}
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#065f46",
+                    background: "#d1fae5",
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    fontWeight: 500,
+                  }}
+                >
+                  * With the limited data we have, actual buffer times may differ. A flat 10 min buffer is included for now.
                 </div>
               </div>
             )}
@@ -978,16 +1045,23 @@ export default function Upload() {
               </p>
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <input
                   type="checkbox"
                   checked={isChecked}
                   onChange={(e) => setIsChecked(e.target.checked)}
+                  style={{ marginTop: 4 }}
                 />
-                <span style={{ fontSize: "0.9rem" }}>
-                  I have checked my PDF before placing order
-                </span>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+                    I have checked my file(s) before placing the order
+                  </span>
+                  <span style={{ fontSize: "0.8rem", color: "var(--gray-500)", marginTop: 2 }}>
+                    Note: Orders can only be cancelled for a full refund while in the <strong>Queued</strong> state. 
+                    Once the vendor starts printing, cancellations are no longer permitted.
+                  </span>
+                </div>
               </label>
             </div>
 
