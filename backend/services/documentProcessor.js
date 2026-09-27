@@ -49,14 +49,17 @@ class DocumentProcessor {
 
       // Step 6: Generate metadata
       const metadata = await this.extractMetadata(pdfPath);
+      const publicBaseUrl = (
+        process.env.PUBLIC_API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`
+      ).replace(/\/$/, '');
 
       return {
         success: true,
         originalName: file.originalname,
         filename: file.filename,
-        fileUrl: `/uploads/${file.filename}`,
-        processedUrl: `/processed/${path.basename(optimizedPath)}`,
-        thumbnailUrl: `/processed/${path.basename(thumbnailPath)}`,
+        fileUrl: `${publicBaseUrl}/uploads/${file.filename}`,
+        processedUrl: `${publicBaseUrl}/processed/${path.basename(optimizedPath)}`,
+        thumbnailUrl: thumbnailPath ? `${publicBaseUrl}/processed/${path.basename(thumbnailPath)}` : null,
         pageCount,
         fileSize: fs.statSync(optimizedPath).size,
         metadata,
@@ -100,7 +103,7 @@ class DocumentProcessor {
     const ext = path.extname(file.originalname).toLowerCase();
     const expectedExt = this.getExtensionFromMimeType(file.mimetype);
 
-    if (ext !== expectedExt) {
+    if (ext !== expectedExt && !(file.mimetype === 'image/jpeg' && ext === '.jpeg')) {
       return { valid: false, error: 'File extension does not match content type' };
     }
 
@@ -145,9 +148,13 @@ class DocumentProcessor {
       const pdfDoc = await PDFDocument.create();
       const image = await pdfDoc.embedJpg(imageBuffer);
       const page = pdfDoc.addPage();
-
-      // Center the image on the page
-      const { width, height } = image.scale(0.75); // Scale to 75% to fit page
+      const margin = 24;
+      const scale = Math.min(
+        (page.getWidth() - margin * 2) / image.width,
+        (page.getHeight() - margin * 2) / image.height
+      );
+      const width = image.width * scale;
+      const height = image.height * scale;
       page.drawImage(image, {
         x: (page.getWidth() - width) / 2,
         y: (page.getHeight() - height) / 2,
@@ -210,18 +217,7 @@ class DocumentProcessor {
    * Generate thumbnail/preview image
    */
   async generateThumbnail(pdfPath, filename) {
-    try {
-      const thumbnailPath = path.join(this.processedDir, `${filename}_thumb.jpg`);
-
-      // For PDF, we'd need additional tools like pdf2pic or similar
-      // For now, create a placeholder or skip
-      // This would require additional dependencies
-
-      return thumbnailPath;
-    } catch (error) {
-      console.warn('Thumbnail generation failed:', error);
-      return null;
-    }
+    return null;
   }
 
   /**
@@ -231,8 +227,10 @@ class DocumentProcessor {
     try {
       const optimizedPath = path.join(this.processedDir, `${filename}_optimized.pdf`);
 
-      // Basic optimization - could be enhanced with more sophisticated tools
-      await fs.copy(pdfPath, optimizedPath);
+      const input = await fs.readFile(pdfPath);
+      const pdf = await PDFDocument.load(input);
+      const output = await pdf.save({ useObjectStreams: true });
+      await fs.writeFile(optimizedPath, output);
 
       return optimizedPath;
     } catch (error) {

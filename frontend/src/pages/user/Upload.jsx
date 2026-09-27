@@ -5,7 +5,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import {
   uploadFile,
   getAvailableVendors,
-  createOrder,
+  initiatePayment,
+  verifyPayment,
   getWaitTimePrediction,
 } from "../../services/api";
 import UserNavbar from "../../components/user/UserNavbar";
@@ -35,7 +36,8 @@ export default function Upload() {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [processedFiles, setProcessedFiles] = useState([]);
   const [fileUrl, setFileUrl] = useState("");
   const [originalFileName, setOriginalFileName] = useState("");
   const [processedUrl, setProcessedUrl] = useState("");
@@ -99,7 +101,12 @@ export default function Upload() {
 
           for (const vendor of res.data) {
             try {
-              const waitRes = await getWaitTimePrediction();
+              const waitRes = await getWaitTimePrediction({
+                vendorId: vendor._id,
+                jobPages: effectivePageCount * quantity,
+                color,
+                sides,
+              });
               waitResults[vendor._id] = waitRes.data.ml_response;
             } catch {
               waitResults[vendor._id] = null;
@@ -126,22 +133,32 @@ export default function Upload() {
   }, []);
 
   // ── File handling ──
-  const handleFileChange = (f) => {
-    if (!f) return;
-    setFile(f);
+  const handleFileChange = (selection) => {
+    const selected = Array.from(selection || []);
+    if (!selected.length) return;
+    if (selected.length > 10) {
+      toast.error("Select no more than 10 files per order");
+      return;
+    }
+    setFiles(selected);
+    setProcessedFiles([]);
+    setFileUrl("");
   };
 
   const handleUpload = async () => {
-    if (!file) return toast.error("Please select a file");
+    if (!files.length) return toast.error("Please select at least one file");
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      files.forEach((file) => fd.append("files", file));
       const res = await uploadFile(fd);
+      const uploadedFiles = res.data.files || [];
+      const firstFile = uploadedFiles[0];
 
       // Set processed file data
-      setFileUrl(res.data.fileUrl || "");
-      setOriginalFileName(res.data.originalName || file.name);
+      setProcessedFiles(uploadedFiles);
+      setFileUrl(firstFile?.fileUrl || res.data.fileUrl || "");
+      setOriginalFileName(firstFile?.originalName || res.data.originalName || files[0].name);
       setTotalDocPages(res.data.pageCount || 1); // Automatically detected page count
       setProcessedUrl(res.data.processedUrl || "");
       setThumbnailUrl(res.data.thumbnailUrl || "");
@@ -160,6 +177,8 @@ export default function Upload() {
 
   // ── Payment (Razorpay) ──
   const handlePayment = async () => {
+    if (!selectedVendor) return toast.error("Select a vendor");
+
     const vendorStillOnline = vendors.find((v) => v._id === selectedVendor._id);
     if (!vendorStillOnline?.isOnline || !vendorStillOnline?.shopOpen) {
       toast.error("Vendor is no longer available");
@@ -167,88 +186,83 @@ export default function Upload() {
       return;
     }
 
-    if (!selectedVendor) return toast.error("Select vendor");
+    setPaying(true);
+    try {
+      const printConfig = {
+        pageOption,
+        customPages: pageOption === "Custom" ? customPages : "",
+        pagesPerSheet,
+        copies: quantity,
+        color,
+        sides,
+        orientation,
+      };
+      const initiation = await initiatePayment({
+        vendorId: selectedVendor._id,
+        fileUrl,
+        files: processedFiles,
+        originalFileName,
+        serviceType,
+        pageCount: effectivePageCount,
+        quantity,
+        pagesPerSheet,
+        color,
+        sides,
+        orientation,
+        instructions,
+        printConfig,
+        processedUrl,
+        thumbnailUrl,
+        metadata,
+      });
 
-    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    const isMock = !razorpayKey || razorpayKey === "rzp_test_placeholder" || razorpayKey.includes("demo");
-
-    if (isMock) {
-      setPaying(true);
-      try {
-        const res = await createOrder({
-          userId: user.uid,
-          userName: user.displayName || user.email,
-          userEmail: user.email,
-          vendorId: selectedVendor._id,
-          fileUrl,
-          originalFileName,
-          serviceType,
-          pageCount: effectivePageCount,
-          quantity,
-          color,
-          sides,
-          orientation,
-          instructions,
-          estimatedPrice,
-          paymentId: `sim_pay_${Date.now()}`,
-          printConfig,
-          processedUrl,
-          thumbnailUrl,
-          metadata,
-          predictedWaitTime: waitTimeData[selectedVendor._id]?.predicted_wait_time || 10,
+      if (initiation.data.mock) {
+        const result = await verifyPayment({
+          paymentAttemptId: initiation.data.paymentAttemptId,
+          mockPayment: true,
         });
-        setOrderDone(res.data);
-        toast.success("Order placed successfully (Sandbox Mode)!");
-      } catch (err) {
-        toast.error("Order failed: " + (err.response?.data?.error || err.message));
-      } finally {
-        setPaying(false);
+        setOrderDone(result.data);
+        toast.success("Order placed in development payment mode");
+        return;
       }
-      return;
+
+      if (!(await loadRazorpayScript())) {
+        throw new Error("Razorpay failed to load");
+      }
+
+      const razorpay = new window.Razorpay({
+        key: initiation.data.key,
+        amount: initiation.data.amount,
+        currency: initiation.data.currency,
+        order_id: initiation.data.razorpayOrderId,
+        name: "QuickPrint",
+        handler: async (response) => {
+          try {
+            const result = await verifyPayment({
+              paymentAttemptId: initiation.data.paymentAttemptId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            setOrderDone(result.data);
+            toast.success("Order placed");
+          } catch (error) {
+            toast.error(error.response?.data?.error || "Payment verification failed");
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: { ondismiss: () => setPaying(false) },
+      });
+      razorpay.on("payment.failed", () => {
+        toast.error("Payment failed. No order was created.");
+        setPaying(false);
+      });
+      razorpay.open();
+    } catch (error) {
+      toast.error(error.response?.data?.error || error.message || "Unable to start payment");
+      setPaying(false);
     }
-
-    const loaded = await loadRazorpayScript();
-    if (!loaded) return toast.error("Razorpay failed to load");
-
-    const options = {
-      key: razorpayKey,
-      amount: Math.round(estimatedPrice * 100),
-      currency: "INR",
-      name: "QuickPrint",
-      handler: async function (response) {
-        try {
-          const res = await createOrder({
-            userId: user.uid,
-            userName: user.displayName || user.email,
-            userEmail: user.email,
-            vendorId: selectedVendor._id,
-            fileUrl,
-            originalFileName,
-            serviceType,
-            pageCount: effectivePageCount,
-            quantity,
-            color,
-            sides,
-            orientation,
-            instructions,
-            estimatedPrice,
-            paymentId: response.razorpay_payment_id,
-            printConfig,
-            processedUrl,
-            thumbnailUrl,
-            metadata,
-            predictedWaitTime: waitTimeData[selectedVendor._id]?.predicted_wait_time || 10,
-          });
-          setOrderDone(res.data);
-          toast.success("Order placed 🎉");
-        } catch (err) {
-          toast.error("Order failed: " + (err.response?.data?.error || err.message));
-        }
-      },
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.open();
   };
 
   const loadRazorpayScript = () =>
@@ -348,7 +362,7 @@ export default function Upload() {
         {/* STEP 0: Upload */}
         {step === 0 && (
           <div className="card">
-            <h3 style={{ marginBottom: 16 }}>Upload Your File</h3>
+            <h3 style={{ marginBottom: 16 }}>Upload Files</h3>
             <div
               className={`upload-zone ${dragging ? "dragging" : ""}`}
               onClick={() => fileInputRef.current.click()}
@@ -360,29 +374,30 @@ export default function Upload() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                handleFileChange(e.dataTransfer.files[0]);
+                handleFileChange(e.dataTransfer.files);
               }}
             >
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 style={{ display: "none" }}
-                onChange={(e) => handleFileChange(e.target.files[0])}
+                onChange={(e) => handleFileChange(e.target.files)}
               />
-              {file ? (
+              {files.length ? (
                 <div>
                   <div style={{ fontSize: "2rem", marginBottom: 8 }}>📄</div>
-                  <p style={{ fontWeight: 600 }}>{file.name}</p>
+                  <p style={{ fontWeight: 600 }}>{files.length} file(s) selected</p>
                   <p className="text-muted" style={{ fontSize: "0.85rem" }}>
-                    {(file.size / 1024).toFixed(1)} KB · Click to change
+                    {files.map((file) => file.name).join(", ")}
                   </p>
                 </div>
               ) : (
                 <div>
                   <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📁</div>
                   <p style={{ fontWeight: 600 }}>
-                    Drop file here or click to browse
+                    Drop files here or click to browse
                   </p>
                   <p className="text-muted" style={{ fontSize: "0.85rem" }}>
                     PDF, DOC, JPG supported
@@ -394,7 +409,7 @@ export default function Upload() {
               className="btn btn-primary"
               style={{ width: "100%", marginTop: 16 }}
               onClick={handleUpload}
-              disabled={uploading || !file}
+              disabled={uploading || !files.length}
             >
               {uploading ? "Uploading..." : "Upload & Continue →"}
             </button>
@@ -409,7 +424,9 @@ export default function Upload() {
               className="text-muted"
               style={{ fontSize: "0.85rem", marginBottom: 20 }}
             >
-              {originalFileName}
+              {processedFiles.length > 1
+                ? `${originalFileName} and ${processedFiles.length - 1} more`
+                : originalFileName}
             </p>
 
             {/* Service Type */}
@@ -819,6 +836,7 @@ export default function Upload() {
             >
               {[
                 ["File", originalFileName],
+                ["Documents", String(processedFiles.length || 1)],
                 ["Service", serviceType],
                 [
                   "Pages",
@@ -914,22 +932,25 @@ export default function Upload() {
               </div>
             )}
 
-            <div
-              style={{
-                background: "var(--warning-light)",
-                borderRadius: 8,
-                padding: 12,
-                marginBottom: 16,
-                fontSize: "0.85rem",
-                color: "#92400e",
-              }}
-            >
-              💳 Demo mode — payment will be simulated (no real charge)
-            </div>
-
             {/* File preview */}
             <div style={{ marginBottom: 16 }}>
-              <h4 style={{ marginBottom: 8 }}>📄 File Preview</h4>
+              <h4 style={{ marginBottom: 8 }}>📄 Document Preview</h4>
+              {processedFiles.length > 1 && (
+                <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                  {processedFiles.map((processedFile) => (
+                    <a
+                      key={processedFile.filename}
+                      href={processedFile.processedUrl || processedFile.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 6, color: "inherit", textDecoration: "none" }}
+                    >
+                      <span>{processedFile.originalName}</span>
+                      <span>{processedFile.pageCount} page(s) · Open</span>
+                    </a>
+                  ))}
+                </div>
+              )}
               <div
                 style={{
                   border: "1px solid #ddd",
@@ -939,7 +960,7 @@ export default function Upload() {
                 }}
               >
                 <iframe
-                  src={fileUrl}
+                  src={processedUrl || fileUrl}
                   title="PDF Preview"
                   width="100%"
                   height="100%"

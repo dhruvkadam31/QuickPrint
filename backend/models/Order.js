@@ -25,6 +25,7 @@ const orderSchema = new mongoose.Schema(
 
     // File
     fileUrl: { type: String, required: true },
+    files: { type: [mongoose.Schema.Types.Mixed], default: [] },
     originalFileName: { type: String },
     processedUrl: { type: String },
     thumbnailUrl: { type: String },

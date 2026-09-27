@@ -1,28 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { loginAdmin } from "../../services/api";
 
 export default function AdminLogin() {
   const [passphrase, setPassphrase] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    setTimeout(() => {
-      // Admin passphrase validation
-      if (passphrase === "admin123" || passphrase === "quickprint2026") {
-        localStorage.setItem("adminToken", "admin_authenticated_session_token");
-        localStorage.setItem("isAdmin", "true");
-        toast.success("Welcome, Administrator!");
-        navigate("/admin/dashboard");
-      } else {
-        toast.error("Invalid Admin Passphrase. (Try 'admin123')");
-        setLoading(false);
-      }
-    }, 400);
+    try {
+      const response = await loginAdmin(passphrase);
+      localStorage.setItem("adminToken", response.data.token);
+      localStorage.setItem("isAdmin", "true");
+      toast.success("Welcome, Administrator!");
+      navigate("/admin/dashboard");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Admin login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,9 +85,6 @@ export default function AdminLogin() {
               required
               autoFocus
             />
-            <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 4, display: "block" }}>
-              Default key: <code>admin123</code>
-            </span>
           </div>
 
           <button

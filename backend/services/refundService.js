@@ -10,87 +10,119 @@ const Order = require("../models/Order");
  * @returns {Promise<Object>} Refund process result
  */
 async function processRefund(order, reason = "Customer cancellation") {
-  // 1. Validate if order is already refunded
-  if (order.paymentStatus === "refunded" || order.refundStatus === "refunded") {
+  if (order.refundStatus === "processed" || order.paymentStatus === "refunded") {
     console.log(`⚠️ Order ${order.orderId} is already refunded.`);
     return {
       success: true,
       alreadyRefunded: true,
       refundId: order.refundId,
       refundAmount: order.refundAmount,
-      refundStatus: "refunded",
+      refundStatus: "processed",
     };
   }
 
-  // 2. Determine payment eligibility
-  const paymentId = order.paymentId || order.razorpayPaymentId;
-  const isPaid = order.paymentStatus === "paid" || order.paymentStatus === "completed" || !!paymentId;
-  if (!isPaid && !paymentId) {
-    console.log(`ℹ️ Order ${order.orderId} was unpaid. Skipping payment refund API call.`);
+  const paymentId = order.paymentId;
+  if (order.paymentStatus !== "paid" || !paymentId) {
     return {
       success: true,
       refundRequired: false,
+      refundStatus: "not_required",
       message: "Order was unpaid. No refund required.",
     };
   }
 
+  if (paymentId.startsWith("sim_pay_")) {
+    return {
+      success: true,
+      refundRequired: false,
+      refundStatus: "not_applicable",
+      message: "Development payment was simulated; no money was charged.",
+    };
+  }
+
+  if (
+    !razorpay ||
+    !process.env.RAZORPAY_KEY_SECRET ||
+    process.env.RAZORPAY_KEY_SECRET === "placeholder_secret"
+  ) {
+    return {
+      success: false,
+      refundRequired: true,
+      refundStatus: "failed",
+      error: "Razorpay refunds are not configured",
+    };
+  }
+
   const refundAmount = order.estimatedPrice || 0;
+  if (refundAmount <= 0) {
+    return {
+      success: false,
+      refundRequired: true,
+      refundStatus: "failed",
+      error: "Refund amount must be greater than zero",
+    };
+  }
+
   const amountInPaise = Math.round(refundAmount * 100);
+  const claim = await Order.findOneAndUpdate(
+    {
+      _id: order._id,
+      refundStatus: { $nin: ["processing", "pending", "processed"] },
+    },
+    { $set: { refundStatus: "processing" } },
+    { new: true }
+  );
 
-  let refundResponse = null;
-  let refundId = null;
-  let refundStatus = "refunded";
+  if (!claim) {
+    return {
+      success: false,
+      refundRequired: true,
+      refundStatus: order.refundStatus || "processing",
+      error: "A refund for this order is already processing",
+    };
+  }
 
   try {
-    // 3. Attempt Razorpay API refund if payment ID is valid and keys exist
-    if (paymentId && razorpay && process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_KEY_SECRET !== "placeholder_secret") {
-      console.log(`💳 Initiating Razorpay refund for Payment ID: ${paymentId}, Amount: ₹${refundAmount}`);
-      refundResponse = await razorpay.payments.refund(paymentId, {
-        amount: amountInPaise,
-        speed: "optimum",
-        notes: {
-          orderId: order.orderId,
-          reason,
-        },
-      });
-      refundId = refundResponse.id;
-      refundStatus = refundResponse.status || "refunded";
-      console.log(`✅ Razorpay refund successful. Refund ID: ${refundId}`);
-    } else {
-      // Sandbox / Test fallback refund ID
-      refundId = `rfnd_sim_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      refundStatus = "refunded";
-      console.log(`🧪 Simulated test refund generated. Refund ID: ${refundId}`);
+    const refundResponse = await razorpay.payments.refund(paymentId, {
+      amount: amountInPaise,
+      speed: "optimum",
+      notes: { orderId: order.orderId, reason },
+    });
+
+    const refundStatus = refundResponse.status;
+    if (!refundResponse.id || !["pending", "processed"].includes(refundStatus)) {
+      throw new Error(`Razorpay returned an unsuccessful refund status: ${refundStatus || "unknown"}`);
     }
-  } catch (err) {
-    console.error(`⚠️ Razorpay API refund note: ${err.message}. Using simulated test refund.`);
-    refundId = `rfnd_sim_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    refundStatus = "refunded";
+
+    const refundProcessedAt = refundStatus === "processed" ? new Date() : null;
+    await Order.findByIdAndUpdate(order._id, {
+      $set: {
+        refundStatus,
+        refundId: refundResponse.id,
+        refundAmount,
+        refundProcessedAt,
+        ...(refundStatus === "processed" ? { paymentStatus: "refunded" } : {}),
+      },
+    });
+
+    return {
+      success: true,
+      refundId: refundResponse.id,
+      refundStatus,
+      refundAmount,
+      refundProcessedAt,
+    };
+  } catch (error) {
+    await Order.findByIdAndUpdate(order._id, {
+      $set: { refundStatus: "failed" },
+    });
+    return {
+      success: false,
+      refundRequired: true,
+      refundStatus: "failed",
+      error: error.message,
+    };
   }
-
-  // 4. Update order payment & refund fields in MongoDB
-  const refundProcessedAt = new Date();
-  const updateData = {
-    paymentStatus: "refunded",
-    refundStatus: refundStatus,
-    refundId: refundId,
-    refundAmount: refundAmount,
-    refundProcessedAt: refundProcessedAt,
-  };
-
-  try {
-    await Order.findOneAndUpdate({ orderId: order.orderId }, { $set: updateData });
-  } catch (dbErr) {
-    console.warn("Could not update order via Mongoose directly:", dbErr.message);
-  }
-
-  return {
-    success: true,
-    refundId,
-    refundStatus,
-    refundAmount,
-    refundProcessedAt,
-  };
 }
 
 module.exports = {

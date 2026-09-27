@@ -24,7 +24,7 @@ export default function VendorDashboard() {
       const [ordRes, revRes, demandRes] = await Promise.all([
         getVendorOrders(vendorData.vendorId),
         getVendorRevenue(vendorData.vendorId),
-        getDemandPrediction(),
+        getDemandPrediction({ vendorId: vendorData.vendorId }),
       ]);
       setOrders(ordRes.data);
       setRevenue(revRes.data);

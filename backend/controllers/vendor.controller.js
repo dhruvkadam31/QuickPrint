@@ -105,10 +105,45 @@ exports.toggleShopStatus = async (req, res) => {
 // PATCH /vendor/:vendorId/settings
 exports.updateSettings = async (req, res) => {
   try {
-    const { bwPricePerPage, colorPricePerPage, bindingPrice, shopOpen } = req.body;
+    const {
+      bwPricePerPage, colorPricePerPage, bindingPrice, shopOpen,
+      activePrinters, printerSpeedPpm, mlVendorId, isExamPeriod,
+    } = req.body;
+    const settings = {};
+    for (const [field, value] of Object.entries({ bwPricePerPage, colorPricePerPage, bindingPrice })) {
+      if (value !== undefined) {
+        const amount = Number(value);
+        if (!Number.isFinite(amount) || amount < 0 || amount > 100000) {
+          return res.status(400).json({ error: `Invalid ${field}` });
+        }
+        settings[field] = amount;
+      }
+    }
+    for (const [field, value, min, max] of [
+      ["activePrinters", activePrinters, 1, 4],
+      ["printerSpeedPpm", printerSpeedPpm, 10, 60],
+      ["mlVendorId", mlVendorId, 1, 5],
+    ]) {
+      if (value !== undefined) {
+        const number = Number(value);
+        if (!Number.isInteger(number) || number < min || number > max) {
+          return res.status(400).json({ error: `Invalid ${field}` });
+        }
+        settings[field] = number;
+      }
+    }
+    if (shopOpen !== undefined) {
+      if (typeof shopOpen !== "boolean") return res.status(400).json({ error: "shopOpen must be boolean" });
+      settings.shopOpen = shopOpen;
+    }
+    if (isExamPeriod !== undefined) {
+      if (typeof isExamPeriod !== "boolean") return res.status(400).json({ error: "isExamPeriod must be boolean" });
+      settings.isExamPeriod = isExamPeriod;
+    }
+
     const vendor = await Vendor.findByIdAndUpdate(
       req.params.vendorId,
-      { bwPricePerPage, colorPricePerPage, bindingPrice, shopOpen },
+      { $set: settings },
       { new: true, select: "-password" }
     );
     if (!vendor) return res.status(404).json({ error: "Vendor not found" });
@@ -152,11 +187,11 @@ exports.getRevenue = async (req, res) => {
 // POST /vendor/logout
 exports.logoutVendor = async (req, res) => {
   try {
-    const { vendorId } = req.body;
+    const vendorId = req.user.vendorId;
     await Vendor.findByIdAndUpdate(vendorId, { isOnline: false });
 
     const io = req.app.get("io");
-    io.emit("vendor-status-change", { vendorId, isOnline: false });
+    io?.emit("vendor-status-change", { vendorId, isOnline: false });
 
     res.json({ success: true });
   } catch (err) {

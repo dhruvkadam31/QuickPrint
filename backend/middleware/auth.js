@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const { getFirebaseAuth } = require("../services/firebaseAdmin");
 
-module.exports = function authMiddleware(req, res, next) {
+module.exports = async function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
@@ -8,10 +9,26 @@ module.exports = function authMiddleware(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.vendor = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid token" });
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const role = decoded.role || (decoded.vendorId ? "VENDOR" : null);
+      if (!role) throw new Error("Token has no role");
+
+      req.user = { ...decoded, role };
+      if (role === "VENDOR") req.vendor = decoded;
+      return next();
+    } catch {
+      const decoded = await getFirebaseAuth().verifyIdToken(token);
+      req.user = {
+        userId: decoded.uid,
+        email: decoded.email,
+        name: decoded.name,
+        role: "CUSTOMER",
+      };
+      req.firebaseUser = decoded;
+      return next();
+    }
+  } catch {
+    return res.status(401).json({ error: "Invalid or unverifiable token" });
   }
 };

@@ -6,6 +6,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const { apiLimiter } = require("./middleware/rateLimiter");
 require("dotenv").config();
 
 const app = express();
@@ -34,6 +35,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(apiLimiter);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/processed", express.static(path.join(__dirname, "processed")));
 
@@ -45,11 +47,15 @@ const vendorRoutes = require("./routes/vendor.routes");
 const orderRoutes = require("./routes/order.routes");
 const mlRoutes = require("./routes/ml.routes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+const authRoutes = require("./routes/authRoutes");
+const paymentsRoutes = require("./routes/payments.routes");
 
 app.use("/vendor", vendorRoutes);
 app.use("/orders", orderRoutes);
 app.use("/api/ml", mlRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/payments", paymentsRoutes);
 
 // Health check
 app.get("/health", (req, res) => res.json({ status: "OK", timestamp: new Date() }));

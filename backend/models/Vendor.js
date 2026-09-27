@@ -17,6 +17,10 @@ const vendorSchema = new mongoose.Schema(
     bwPricePerPage: { type: Number, default: 1.5 },
     colorPricePerPage: { type: Number, default: 5.0 },
     bindingPrice: { type: Number, default: 20.0 },
+    activePrinters: { type: Number, min: 1, max: 4, default: 1 },
+    printerSpeedPpm: { type: Number, min: 10, max: 60, default: 30 },
+    mlVendorId: { type: Number, min: 1, max: 5, default: 1 },
+    isExamPeriod: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

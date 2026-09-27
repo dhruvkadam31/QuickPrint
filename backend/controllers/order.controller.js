@@ -16,25 +16,46 @@ function generateOTP() {
 // POST /orders/upload - upload and process file
 exports.uploadFile = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const files = [
+      ...(req.files?.file || []),
+      ...(req.files?.files || []),
+    ];
+    if (!files.length) return res.status(400).json({ error: "No file uploaded" });
+    if (files.length > 10) return res.status(400).json({ error: "Maximum 10 files per order" });
 
-    console.log(`📁 Processing upload: ${req.file.originalname}`);
-
-    // Process the document (validate, convert, count pages, etc.)
-    const processingResult = await documentProcessor.processDocument(req.file);
-
-    console.log(`✅ File processed successfully: ${processingResult.pageCount} pages`);
+    const processingResults = [];
+    for (const file of files) {
+      processingResults.push(await documentProcessor.processDocument(file));
+    }
+    const first = processingResults[0];
+    const pageCount = processingResults.reduce((total, result) => total + result.pageCount, 0);
 
     res.json({
       success: true,
-      ...processingResult,
+      ...first,
+      pageCount,
+      files: processingResults.map((result) => ({
+        originalName: result.originalName,
+        filename: result.filename,
+        fileUrl: result.fileUrl,
+        processedUrl: result.processedUrl,
+        thumbnailUrl: result.thumbnailUrl,
+        pageCount: result.pageCount,
+        fileSize: result.fileSize,
+        mimeType: result.mimeType,
+        metadata: result.metadata,
+      })),
     });
   } catch (err) {
     console.error("❌ File processing failed:", err);
 
     // Cleanup failed upload
-    if (req.file?.filename) {
-      await documentProcessor.cleanup(req.file.filename);
+    const files = [
+      ...(req.files?.file || []),
+      ...(req.files?.files || []),
+    ];
+    for (const file of files) {
+      if (file.filename) await documentProcessor.cleanup(file.filename);
     }
 
     res.status(500).json({
@@ -47,12 +68,15 @@ exports.uploadFile = async (req, res) => {
 // POST /orders/create
 exports.createOrder = async (req, res) => {
   try {
+    if (process.env.PAYMENTS_MOCK_MODE !== "true" || process.env.NODE_ENV === "production") {
+      return res.status(410).json({ error: "Use the verified payment endpoints to create orders" });
+    }
+
     const {
-      userId,
       userName,
-      userEmail,
       vendorId,
       fileUrl,
+      files,
       originalFileName,
       serviceType,
       quantity,
@@ -80,12 +104,13 @@ exports.createOrder = async (req, res) => {
     const orderCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
     const order = await Order.create({
-      userId,
+      userId: req.user.userId,
       userName,
-      userEmail,
+      userEmail: req.user.email,
       vendorId,
       vendorName: vendor.shopName,
       fileUrl,
+      files: Array.isArray(files) ? files : [],
       processedUrl,
       thumbnailUrl,
       originalFileName,
@@ -159,27 +184,36 @@ exports.getUserOrders = async (req, res) => {
 exports.updateStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ["Queued", "Printing", "Ready", "Picked Up", "Cancelled"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: "Invalid status" });
+    const order = await Order.findOne({ orderId: req.params.orderId });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (
+      req.user.role === "VENDOR" &&
+      String(order.vendorId) !== String(req.user.vendorId)
+    ) {
+      return res.status(403).json({ error: "Cannot update another vendor's order" });
+    }
+
+    const validTransition =
+      (order.status === "Queued" && status === "Printing") ||
+      (order.status === "Printing" && status === "Ready");
+    if (!validTransition) {
+      return res.status(400).json({ error: "Invalid status transition; pickup must be verified with OTP" });
     }
 
     const update = { status };
     if (status === "Printing") update.printStartedAt = new Date();
     if (status === "Ready") update.readyAt = new Date();
-    if (status === "Picked Up") update.pickedUpAt = new Date();
 
-    const order = await Order.findOneAndUpdate(
-      { orderId: req.params.orderId },
-      update,
+    const updatedOrder = await Order.findOneAndUpdate(
+      { orderId: req.params.orderId, status: order.status },
+      { $set: update },
       { new: true }
     );
 
-    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!updatedOrder) return res.status(409).json({ error: "Order status changed; refresh and retry" });
 
-    // Send status update email if Ready
-    if (status === "Ready") {
-      sendOrderStatusUpdateEmail(order, order.userEmail).catch((e) =>
+    if (status === "Printing" || status === "Ready") {
+      sendOrderStatusUpdateEmail(updatedOrder, updatedOrder.userEmail).catch((e) =>
         console.warn("Non-fatal email error:", e.message)
       );
     }
@@ -187,10 +221,10 @@ exports.updateStatus = async (req, res) => {
     // Emit real-time update
     const io = req.app.get("io");
     if (io) {
-      io.emit("order-updated", { orderId: order.orderId, status, order });
+      io.emit("order-updated", { orderId: updatedOrder.orderId, status, order: updatedOrder });
     }
 
-    res.json({ success: true, order });
+    res.json({ success: true, order: updatedOrder });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -208,33 +242,37 @@ exports.cancelOrder = async (req, res) => {
       return res.status(404).json({ success: false, error: "Order not found" });
     }
 
-    if (order.status === "Ready" || order.status === "Picked Up") {
+    if (req.user.role === "CUSTOMER" && order.userId !== req.user.userId) {
+      return res.status(403).json({ success: false, error: "Cannot cancel another user's order" });
+    }
+
+    if (!["Queued", "Printing"].includes(order.status)) {
       return res.status(400).json({
         success: false,
-        error: `Cannot cancel order in '${order.status}' status. It has already been processed.`,
+        error: `Cannot cancel order in '${order.status}' status.`,
       });
     }
 
-    if (order.status === "Cancelled") {
-      return res.status(400).json({
-        success: false,
-        error: "Order is already cancelled.",
-      });
-    }
-
-    // Process refund via safe idempotent refund service
     const refundResult = await processRefund(order, reason);
+    if (!refundResult.success) {
+      return res.status(502).json({
+        success: false,
+        error: "Order was not cancelled because its refund could not be confirmed",
+        refundStatus: refundResult.refundStatus,
+        details: refundResult.error,
+      });
+    }
 
     const updateData = {
       status: "Cancelled",
       cancellationReason: reason,
       cancelledAt: new Date(),
-      cancelledBy,
+      cancelledBy: req.user.role === "ADMIN" ? "ADMIN" : "CUSTOMER",
       refundId: refundResult.refundId || order.refundId,
-      refundStatus: refundResult.refundStatus || "not_applicable",
+      refundStatus: refundResult.refundStatus || "not_required",
       refundAmount: refundResult.refundAmount || 0,
-      refundProcessedAt: refundResult.refundProcessedAt || null,
-      paymentStatus: refundResult.refundId ? "refunded" : order.paymentStatus,
+      ...(refundResult.refundProcessedAt ? { refundProcessedAt: refundResult.refundProcessedAt } : {}),
+      ...(refundResult.refundStatus === "processed" ? { paymentStatus: "refunded" } : {}),
     };
 
     const updatedOrder = await Order.findOneAndUpdate(
@@ -273,7 +311,8 @@ exports.cancelOrder = async (req, res) => {
 // POST /orders/verify-otp - vendor scans OTP for pickup
 exports.verifyOTP = async (req, res) => {
   try {
-    const { otp, vendorId } = req.body;
+    const { otp } = req.body;
+    const vendorId = req.user.vendorId;
 
     const order = await Order.findOne({ otp, vendorId, otpUsed: false });
     if (!order) return res.status(404).json({ error: "Invalid OTP or already used" });
@@ -304,7 +343,7 @@ exports.getVendorQueue = async (req, res) => {
     const queue = await Order.find({
       vendorId: req.params.vendorId,
       status: { $in: ["Queued", "Printing"] },
-    }).sort({ createdAt: 1 });
+    }, { otp: 0, userEmail: 0 }).sort({ createdAt: 1 });
     res.json(queue);
   } catch (err) {
     res.status(500).json({ error: err.message });

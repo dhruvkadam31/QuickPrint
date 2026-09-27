@@ -10,6 +10,10 @@ export default function VendorSettings() {
   const [color, setColor] = useState(vendorData.colorPricePerPage || 5.0);
   const [binding, setBinding] = useState(vendorData.bindingPrice || 20.0);
   const [shopOpen, setShopOpen] = useState(vendorData.shopOpen ?? true);
+  const [activePrinters, setActivePrinters] = useState(vendorData.activePrinters || 1);
+  const [printerSpeedPpm, setPrinterSpeedPpm] = useState(vendorData.printerSpeedPpm || 30);
+  const [mlVendorId, setMlVendorId] = useState(vendorData.mlVendorId || 1);
+  const [isExamPeriod, setIsExamPeriod] = useState(vendorData.isExamPeriod || false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -20,6 +24,10 @@ export default function VendorSettings() {
         colorPricePerPage: parseFloat(color),
         bindingPrice: parseFloat(binding),
         shopOpen,
+        activePrinters: Number(activePrinters),
+        printerSpeedPpm: Number(printerSpeedPpm),
+        mlVendorId: Number(mlVendorId),
+        isExamPeriod,
       });
       // Update localStorage
       const updated = { ...vendorData, ...res.data.vendor, vendorId: vendorData.vendorId };
@@ -65,6 +73,25 @@ export default function VendorSettings() {
         <Field label="B&W Price per Page" value={bw} onChange={setBw} />
         <Field label="Color Price per Page" value={color} onChange={setColor} />
         <Field label="Binding Price" value={binding} onChange={setBinding} suffix="" />
+
+        <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "20px 0" }} />
+        <h3 style={{ marginBottom: 16 }}>🖨️ Printer Capacity</h3>
+        <div className="form-group">
+          <label className="input-label" htmlFor="active-printers">Active printers (1-4)</label>
+          <input id="active-printers" className="input" type="number" min="1" max="4" step="1" value={activePrinters} onChange={(event) => setActivePrinters(event.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="input-label" htmlFor="printer-speed">Printer speed (pages/min, 10-60)</label>
+          <input id="printer-speed" className="input" type="number" min="10" max="60" step="1" value={printerSpeedPpm} onChange={(event) => setPrinterSpeedPpm(event.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="input-label" htmlFor="ml-vendor-id">ML model vendor slot (1-5)</label>
+          <input id="ml-vendor-id" className="input" type="number" min="1" max="5" step="1" value={mlVendorId} onChange={(event) => setMlVendorId(event.target.value)} />
+        </div>
+        <label className="form-group" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={isExamPeriod} onChange={(event) => setIsExamPeriod(event.target.checked)} />
+          Exam period
+        </label>
 
         <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "20px 0" }} />
 
