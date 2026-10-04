@@ -52,6 +52,7 @@ exports.loginVendor = async (req, res) => {
         bwPricePerPage: vendor.bwPricePerPage,
         colorPricePerPage: vendor.colorPricePerPage,
         bindingPrice: vendor.bindingPrice,
+        extraServices: vendor.extraServices || [],
       },
     });
   } catch (err) {
@@ -139,6 +140,13 @@ exports.updateSettings = async (req, res) => {
     if (isExamPeriod !== undefined) {
       if (typeof isExamPeriod !== "boolean") return res.status(400).json({ error: "isExamPeriod must be boolean" });
       settings.isExamPeriod = isExamPeriod;
+    }
+    
+    if (req.body.extraServices !== undefined) {
+      if (!Array.isArray(req.body.extraServices)) {
+        return res.status(400).json({ error: "extraServices must be an array" });
+      }
+      settings.extraServices = req.body.extraServices;
     }
 
     const vendor = await Vendor.findByIdAndUpdate(

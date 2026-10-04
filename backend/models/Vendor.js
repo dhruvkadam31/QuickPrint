@@ -21,6 +21,12 @@ const vendorSchema = new mongoose.Schema(
     printerSpeedPpm: { type: Number, min: 10, max: 60, default: 30 },
     mlVendorId: { type: Number, min: 1, max: 5, default: 1 },
     isExamPeriod: { type: Boolean, default: false },
+    extraServices: [
+      {
+        name: { type: String, required: true },
+        price: { type: Number, required: true },
+      },
+    ],
   },
   { timestamps: true }
 );

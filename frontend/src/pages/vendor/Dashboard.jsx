@@ -18,6 +18,9 @@ export default function VendorDashboard() {
   const [shopOpen, setShopOpen] = useState(vendorData.shopOpen ?? true);
   const [loading, setLoading] = useState(true);
   const [demandForecast, setDemandForecast] = useState(null);
+  const [alertsEnabled, setAlertsEnabled] = useState(() => {
+    return localStorage.getItem("alertsEnabled") === "true";
+  });
 
   const fetchAll = async () => {
     try {
@@ -45,6 +48,10 @@ export default function VendorDashboard() {
     socket.on("order-created", () => {
       console.log("ORDER CREATED EVENT RECEIVED");
       toast("📦 New order received!", { icon: "🔔" });
+      if (localStorage.getItem("alertsEnabled") === "true") {
+        const audio = new Audio("/notification.mp3");
+        audio.play().catch(() => {});
+      }
       fetchAll();
     });
 
@@ -80,33 +87,38 @@ export default function VendorDashboard() {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <h2 style={{ margin: 0 }}>Dashboard</h2>
-            <button
-              onClick={async () => {
-                const p = await Notification.requestPermission();
-                const audio = new Audio("/notification.mp3");
-                audio.play().catch(() => {});
-                if (p === "granted") {
-                  toast.success("Alerts enabled! 🔔");
-                } else {
-                  toast.error("Please allow notifications in your browser settings");
-                }
-              }}
-              style={{
-                background: "var(--brand-light)",
-                color: "var(--brand)",
-                border: "none",
-                padding: "4px 10px",
-                borderRadius: "20px",
-                fontSize: "0.75rem",
-                fontWeight: "bold",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px"
-              }}
-            >
-              🔔 Enable Alerts
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.85rem", fontWeight: "bold", background: alertsEnabled ? "var(--brand-light)" : "#f1f5f9", padding: "4px 10px", borderRadius: "20px", color: alertsEnabled ? "var(--brand)" : "#64748b" }}>
+                <input 
+                  type="checkbox" 
+                  checked={alertsEnabled}
+                  onChange={async (e) => {
+                    const isChecked = e.target.checked;
+                    if (isChecked) {
+                      const p = await Notification.requestPermission();
+                      if (p === "granted") {
+                        setAlertsEnabled(true);
+                        localStorage.setItem("alertsEnabled", "true");
+                        toast.success("Alerts enabled! 🔔");
+                        const audio = new Audio("/notification.mp3");
+                        audio.play().catch(() => {});
+                      } else {
+                        toast.error("Please allow notifications in your browser settings");
+                      }
+                    } else {
+                      setAlertsEnabled(false);
+                      localStorage.setItem("alertsEnabled", "false");
+                      toast.success("Alerts disabled 🔕");
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                />
+                🔔 Alerts
+              </label>
+              <div title="When enabled, you will hear a notification sound whenever a new order arrives." style={{ cursor: "help", background: "#e2e8f0", color: "#475569", width: "18px", height: "18px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold" }}>
+                ?
+              </div>
+            </div>
           </div>
           <p className="text-muted" style={{ marginTop: 4 }}>
             {new Date().toLocaleDateString("en-IN", {

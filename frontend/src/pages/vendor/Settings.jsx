@@ -14,6 +14,7 @@ export default function VendorSettings() {
   const [printerSpeedPpm, setPrinterSpeedPpm] = useState(vendorData.printerSpeedPpm || 30);
   const [mlVendorId, setMlVendorId] = useState(vendorData.mlVendorId || 1);
   const [isExamPeriod, setIsExamPeriod] = useState(vendorData.isExamPeriod || false);
+  const [extraServices, setExtraServices] = useState(vendorData.extraServices || []);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -28,6 +29,7 @@ export default function VendorSettings() {
         printerSpeedPpm: Number(printerSpeedPpm),
         mlVendorId: Number(mlVendorId),
         isExamPeriod,
+        extraServices,
       });
       // Update localStorage
       const updated = { ...vendorData, ...res.data.vendor, vendorId: vendorData.vendorId };
@@ -73,6 +75,67 @@ export default function VendorSettings() {
         <Field label="B&W Price per Page" value={bw} onChange={setBw} />
         <Field label="Color Price per Page" value={color} onChange={setColor} />
         <Field label="Binding Price" value={binding} onChange={setBinding} suffix="" />
+
+        <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "20px 0" }} />
+        <h3 style={{ marginBottom: 16 }}>🛠️ Extra Services</h3>
+        {extraServices.map((service, index) => (
+          <div key={index} style={{ display: "flex", gap: "12px", marginBottom: "12px", alignItems: "center" }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              placeholder="Service Name (e.g. Lamination)"
+              value={service.name}
+              onChange={(e) => {
+                const newServices = [...extraServices];
+                newServices[index].name = e.target.value;
+                setExtraServices(newServices);
+              }}
+            />
+            <input
+              className="input"
+              type="number"
+              style={{ width: "100px" }}
+              placeholder="Price"
+              value={service.price}
+              onChange={(e) => {
+                const newServices = [...extraServices];
+                newServices[index].price = parseFloat(e.target.value);
+                setExtraServices(newServices);
+              }}
+            />
+            <button
+              style={{
+                background: "var(--danger)",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                padding: "8px 12px",
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                const newServices = extraServices.filter((_, i) => i !== index);
+                setExtraServices(newServices);
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          style={{
+            background: "var(--brand-light)",
+            color: "var(--brand)",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            fontWeight: "bold",
+            cursor: "pointer",
+            width: "100%",
+          }}
+          onClick={() => setExtraServices([...extraServices, { name: "", price: 0 }])}
+        >
+          + Add Extra Service
+        </button>
 
         <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "20px 0" }} />
         <h3 style={{ marginBottom: 16 }}>🖨️ Printer Capacity</h3>

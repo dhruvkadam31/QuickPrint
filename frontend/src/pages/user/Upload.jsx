@@ -835,6 +835,15 @@ export default function Upload() {
                       >
                         {v.name}
                       </div>
+                      {v.extraServices && v.extraServices.length > 0 && (
+                        <div style={{ marginTop: "6px", fontSize: "0.75rem", display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                          {v.extraServices.map((es, i) => (
+                            <span key={i} style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: "10px", color: "#475569" }}>
+                              {es.name} (₹{es.price})
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {waitInfo && (
