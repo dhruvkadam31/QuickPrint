@@ -53,6 +53,8 @@ export const uploadFile = (formData) =>
   api.post("/orders/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+export const recheckDocument = (data) => api.post("/orders/validate", data);
+export const removeUploadedFile = (data) => api.post("/orders/remove-file", data);
 export const createOrder = (data) => api.post("/orders/create", data);
 export const initiatePayment = (data) => api.post("/api/payments/initiate", data);
 export const verifyPayment = (data) => api.post("/api/payments/verify", data);

@@ -16,6 +16,9 @@ router.post(
 	orderController.uploadFile
 );
 
+router.post("/validate", authMiddleware, requireRole("CUSTOMER"), orderController.validateDocument);
+router.post("/remove-file", authMiddleware, requireRole("CUSTOMER"), orderController.removeUploadedFile);
+
 router.get("/user/:userId", authMiddleware, requireUserOrAdmin(), orderController.getUserOrders);
 router.get("/queue/:vendorId", authMiddleware, requireRole("VENDOR", "ADMIN"), requireVendorOrAdmin(), orderController.getVendorQueue);
 router.get("/admin/all", authMiddleware, requireRole("ADMIN"), orderController.getAllOrders);

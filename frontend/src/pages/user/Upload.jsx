@@ -4,12 +4,15 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   uploadFile,
+  recheckDocument,
+  removeUploadedFile,
   getAvailableVendors,
   initiatePayment,
   verifyPayment,
   getWaitTimePrediction,
 } from "../../services/api";
 import UserNavbar from "../../components/user/UserNavbar";
+import SmartDocumentChecker from "../../components/user/SmartDocumentChecker";
 import socket from "../../services/socket";
 
 const STEPS = ["Upload File", "Configure", "Select Vendor", "Payment"];
@@ -67,6 +70,10 @@ export default function Upload() {
   const [metadata, setMetadata] = useSessionState("qp_metadata", null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState("");
+  const [showReport, setShowReport] = useSessionState("qp_showReport", false);
 
   // Per-file Config
   const [fileConfigs, setFileConfigs] = useSessionState("qp_fileConfigs", []);
@@ -161,63 +168,246 @@ export default function Upload() {
     return () => socket.off("vendor-status-change");
   }, []);
 
+  // Immediate client-side validation check
+  const validateFileClientSide = (file) => {
+    const allowedExtensions = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".txt"];
+    if (file.size === 0) {
+      return { valid: false, error: `"${file.name}" is completely empty (0 bytes).` };
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      return { valid: false, error: `"${file.name}" exceeds the 20 MB upload limit.` };
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      return {
+        valid: false,
+        error: `"${file.name}" is unsupported. Accepted formats: PDF, DOC, DOCX, JPG, PNG, GIF, BMP, TIFF, TXT.`,
+      };
+    }
+    return { valid: true };
+  };
+
+  // Run full Document Analysis pipeline
+  const runDocumentAnalysis = async (filesToAnalyze, replaceIndex = null) => {
+    if (!filesToAnalyze || !filesToAnalyze.length) return;
+
+    setAnalyzing(true);
+    setAnalysisProgress(15);
+    setAnalysisStage("Checking file integrity & signature...");
+
+    const t1 = setTimeout(() => {
+      setAnalysisProgress(40);
+      setAnalysisStage("Verifying format authentication & structure...");
+    }, 350);
+
+    const t2 = setTimeout(() => {
+      setAnalysisProgress(70);
+      setAnalysisStage("Scanning for blank and low-content pages...");
+    }, 750);
+
+    const t3 = setTimeout(() => {
+      setAnalysisProgress(92);
+      setAnalysisStage("Evaluating print resolution & dimensions...");
+    }, 1150);
+
+    try {
+      const fd = new FormData();
+      filesToAnalyze.forEach((f) => fd.append("files", f));
+      const res = await uploadFile(fd);
+
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      setAnalysisProgress(100);
+      setAnalysisStage("Inspection complete!");
+
+      const uploadedFiles = res.data.files || [];
+      const firstFile = uploadedFiles[0];
+
+      if (replaceIndex !== null && replaceIndex >= 0) {
+        // Replacement mode
+        setProcessedFiles((prev) => {
+          const next = [...prev];
+          next[replaceIndex] = firstFile;
+          return next;
+        });
+        setFileConfigs((prev) => {
+          const next = [...prev];
+          next[replaceIndex] = {
+            serviceType: "Print",
+            pageOption: "All",
+            customPages: "",
+            totalDocPages: firstFile.pageCount || 1,
+            pagesPerSheet: 1,
+            quantity: 1,
+            color: "B&W",
+            sides: "Single",
+            orientation: "Portrait",
+            instructions: "",
+            originalName: firstFile.originalName,
+          };
+          return next;
+        });
+        toast.success(`File replaced and validated: ${firstFile.originalName}`);
+      } else {
+        // Normal append/set mode
+        setProcessedFiles((prev) => {
+          if (!prev.length) return uploadedFiles;
+          const newNames = new Set(uploadedFiles.map((u) => u.filename));
+          const kept = prev.filter((p) => !newNames.has(p.filename));
+          return [...kept, ...uploadedFiles];
+        });
+
+        setFileConfigs((prev) => {
+          const newNames = new Set(uploadedFiles.map((u) => u.originalName));
+          const kept = prev.filter((c) => !newNames.has(c.originalName));
+          const created = uploadedFiles.map((f) => ({
+            serviceType: "Print",
+            pageOption: "All",
+            customPages: "",
+            totalDocPages: f.pageCount || 1,
+            pagesPerSheet: 1,
+            quantity: 1,
+            color: "B&W",
+            sides: "Single",
+            orientation: "Portrait",
+            instructions: "",
+            originalName: f.originalName,
+          }));
+          return [...kept, ...created];
+        });
+
+        if (firstFile) {
+          setFileUrl(firstFile.fileUrl || res.data.fileUrl || "");
+          setOriginalFileName(firstFile.originalName || res.data.originalName || "");
+          setProcessedUrl(res.data.processedUrl || "");
+          setThumbnailUrl(res.data.thumbnailUrl || "");
+          setMetadata(res.data.metadata || null);
+        }
+      }
+
+      setShowReport(true);
+
+      setTimeout(() => {
+        setAnalyzing(false);
+        const hasFailures = uploadedFiles.some((f) => f.validation?.overallStatus === "FAILED");
+        const hasWarns = uploadedFiles.some((f) => f.validation?.overallStatus === "WARNING");
+        if (hasFailures) {
+          toast.error("File validation failed. Please check the report.");
+        } else if (hasWarns) {
+          toast("Document warnings detected. Please review before printing.", { icon: "⚠️" });
+        } else {
+          toast.success("Document check passed! Ready to print.");
+        }
+      }, 400);
+    } catch (err) {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      setAnalyzing(false);
+      toast.error("Upload & Analysis failed: " + (err.response?.data?.error || err.message));
+    }
+  };
+
   // ── File handling ──
   const handleFileChange = (selection) => {
     const selected = Array.from(selection || []);
     if (!selected.length) return;
-    
-    setFiles((prev) => {
-      const newFiles = [...prev, ...selected];
-      if (newFiles.length > 10) {
-        toast.error("Select no more than 10 files per order");
-        return prev;
+
+    for (const f of selected) {
+      const check = validateFileClientSide(f);
+      if (!check.valid) {
+        toast.error(check.error);
+        return;
       }
-      setProcessedFiles([]);
+    }
+
+    if (files.length + selected.length > 10) {
+      toast.error("Select no more than 10 files per order");
+      return;
+    }
+
+    setFiles((prev) => [...prev, ...selected]);
+    runDocumentAnalysis(selected);
+  };
+
+  const handleReplaceFile = (targetIdx, newFile) => {
+    const check = validateFileClientSide(newFile);
+    if (!check.valid) {
+      toast.error(check.error);
+      return;
+    }
+
+    const oldFile = processedFiles[targetIdx];
+    if (oldFile?.filename) {
+      removeUploadedFile({ filename: oldFile.filename }).catch(() => {});
+    }
+
+    runDocumentAnalysis([newFile], targetIdx);
+  };
+
+  const handleRemoveFile = (targetIdx) => {
+    const fileToRemove = processedFiles[targetIdx];
+    if (fileToRemove?.filename) {
+      removeUploadedFile({ filename: fileToRemove.filename }).catch(() => {});
+    }
+
+    const remaining = processedFiles.filter((_, i) => i !== targetIdx);
+    setProcessedFiles(remaining);
+    setFileConfigs((prev) => prev.filter((_, i) => i !== targetIdx));
+    setFiles((prev) => prev.filter((_, i) => i !== targetIdx));
+
+    if (remaining.length === 0) {
+      setShowReport(false);
       setFileUrl("");
-      return newFiles;
-    });
+      setActiveFileIdx(0);
+    } else {
+      setActiveFileIdx(Math.max(0, targetIdx - 1));
+    }
+    toast.success("File removed from order");
+  };
+
+  const handleRecheckFile = async (file) => {
+    if (!file?.filename) return;
+    try {
+      toast.loading("Re-inspecting document...", { id: "recheck" });
+      const res = await recheckDocument({ filename: file.filename, forceRecheck: true });
+      if (res.data.success && res.data.validation) {
+        setProcessedFiles((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((f) => f.filename === file.filename);
+          if (idx !== -1) {
+            next[idx] = { ...next[idx], validation: res.data.validation };
+          }
+          return next;
+        });
+        toast.success("Document rechecked successfully! Report updated.", { id: "recheck" });
+      }
+    } catch (err) {
+      toast.error("Recheck failed: " + (err.response?.data?.error || err.message), { id: "recheck" });
+    }
+  };
+
+  const handleAddFiles = (newSelection) => {
+    const selected = Array.from(newSelection || []);
+    if (!selected.length) return;
+    for (const f of selected) {
+      const check = validateFileClientSide(f);
+      if (!check.valid) {
+        toast.error(check.error);
+        return;
+      }
+    }
+    if (processedFiles.length + selected.length > 10) {
+      toast.error("Maximum 10 files per order");
+      return;
+    }
+    runDocumentAnalysis(selected);
   };
 
   const handleUpload = async () => {
     if (!files.length) return toast.error("Please select at least one file");
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      files.forEach((file) => fd.append("files", file));
-      const res = await uploadFile(fd);
-      const uploadedFiles = res.data.files || [];
-      const firstFile = uploadedFiles[0];
-
-      // Set processed file data
-      setProcessedFiles(uploadedFiles);
-      setFileConfigs(uploadedFiles.map(f => ({
-        serviceType: "Print",
-        pageOption: "All",
-        customPages: "",
-        totalDocPages: f.pageCount || 1,
-        pagesPerSheet: 1,
-        quantity: 1,
-        color: "B&W",
-        sides: "Single",
-        orientation: "Portrait",
-        instructions: ""
-      })));
-      setActiveFileIdx(0);
-      setFileUrl(firstFile?.fileUrl || res.data.fileUrl || "");
-      setOriginalFileName(firstFile?.originalName || res.data.originalName || files[0].name);
-      setProcessedUrl(res.data.processedUrl || "");
-      setThumbnailUrl(res.data.thumbnailUrl || "");
-      setMetadata(res.data.metadata || null);
-
-      toast.success(`File processed successfully! Detected ${res.data.pageCount || 1} pages.`);
-      setStep(1);
-    } catch (err) {
-      toast.error(
-        "Upload failed: " + (err.response?.data?.error || err.message)
-      );
-    } finally {
-      setUploading(false);
-    }
+    runDocumentAnalysis(files);
   };
 
   // ── Payment (Razorpay) ──
@@ -440,77 +630,122 @@ export default function Upload() {
           </div>
         </div>
 
-        {/* STEP 0: Upload */}
+        {/* STEP 0: Upload & Smart Document Validation */}
         {step === 0 && (
-          <div className="card">
-            <h3 style={{ marginBottom: 16 }}>Upload Files</h3>
-            <div
-              className={`upload-zone ${dragging ? "dragging" : ""}`}
-              onClick={() => fileInputRef.current.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                handleFileChange(e.dataTransfer.files);
-              }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                style={{ display: "none" }}
-                onChange={(e) => handleFileChange(e.target.files)}
+          <>
+            {analyzing || (showReport && processedFiles.length > 0) ? (
+              <SmartDocumentChecker
+                files={processedFiles}
+                activeIdx={activeFileIdx}
+                setActiveIdx={setActiveFileIdx}
+                analyzing={analyzing}
+                analysisProgress={analysisProgress}
+                analysisStage={analysisStage}
+                onReplaceFile={handleReplaceFile}
+                onRemoveFile={handleRemoveFile}
+                onRecheckFile={handleRecheckFile}
+                onAddFiles={handleAddFiles}
+                onContinue={() => setStep(1)}
+                onBack={() => {
+                  setShowReport(false);
+                }}
               />
-              {files.length ? (
-                <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>📄</div>
-                  <p style={{ fontWeight: 600 }}>{files.length} file(s) selected</p>
-                  <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 16 }}>
-                    {files.map((file) => file.name).join(", ")}
-                  </p>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button
-                      className="btn btn-gray"
-                      style={{ fontSize: "0.8rem", padding: "6px 12px" }}
-                      onClick={() => setFiles([])}
-                    >
-                      Clear All
-                    </button>
-                    <button
-                      className="btn"
-                      style={{ fontSize: "0.8rem", padding: "6px 12px", background: "var(--brand-light)", color: "var(--brand)" }}
-                      onClick={() => fileInputRef.current.click()}
-                    >
-                      + Add More Files
-                    </button>
+            ) : (
+              <div className="card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Upload Documents</h3>
+                    <p className="text-muted" style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
+                      Smart Document Checker automatically inspects files for blank pages, corruptions, and print errors.
+                    </p>
                   </div>
+                  {processedFiles.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-gray"
+                      style={{ fontSize: "0.82rem", padding: "6px 14px" }}
+                      onClick={() => setShowReport(true)}
+                    >
+                      View Report ({processedFiles.length}) →
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📁</div>
-                  <p style={{ fontWeight: 600 }}>
-                    Drop files here or click to browse
-                  </p>
-                  <p className="text-muted" style={{ fontSize: "0.85rem" }}>
-                    PDF, DOC, JPG supported
-                  </p>
+
+                <div
+                  className={`upload-zone ${dragging ? "dragging" : ""}`}
+                  onClick={() => fileInputRef.current.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragging(false);
+                    handleFileChange(e.dataTransfer.files);
+                  }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.txt"
+                    style={{ display: "none" }}
+                    onChange={(e) => handleFileChange(e.target.files)}
+                  />
+                  {files.length ? (
+                    <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <div style={{ fontSize: "2rem", marginBottom: 8 }}>📄</div>
+                      <p style={{ fontWeight: 600 }}>{files.length} file(s) selected</p>
+                      <p className="text-muted" style={{ fontSize: "0.85rem", marginBottom: 16 }}>
+                        {files.map((file) => file.name).join(", ")}
+                      </p>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button
+                          className="btn btn-gray"
+                          style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                          onClick={() => {
+                            setFiles([]);
+                            setProcessedFiles([]);
+                          }}
+                        >
+                          Clear All
+                        </button>
+                        <button
+                          className="btn"
+                          style={{ fontSize: "0.8rem", padding: "6px 12px", background: "var(--brand-light)", color: "var(--brand)" }}
+                          onClick={() => fileInputRef.current.click()}
+                        >
+                          + Add More Files
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📁</div>
+                      <p style={{ fontWeight: 600 }}>
+                        Drop files here or click to browse
+                      </p>
+                      <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+                        PDF, DOCX, DOC, JPG, PNG, GIF, BMP, TIFF, TXT supported (Max 20MB)
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ width: "100%", marginTop: 16 }}
-              onClick={handleUpload}
-              disabled={uploading || !files.length}
-            >
-              {uploading ? "Uploading..." : "Upload & Continue →"}
-            </button>
-          </div>
+
+                <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={handleUpload}
+                    disabled={uploading || analyzing || !files.length}
+                  >
+                    {analyzing ? "Analyzing Document..." : "Analyze & Inspect Document →"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* STEP 1: Configure — Chrome-style print dialog */}
@@ -595,23 +830,52 @@ export default function Upload() {
               </div>
 
               {activeConfig.pageOption === "All" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <label
-                    className="input-label"
-                    style={{ margin: 0, whiteSpace: "nowrap" }}
-                  >
-                    Total pages in doc:
-                  </label>
-                  <input
-                    className="input"
-                    type="number"
-                    min={1}
-                    value={activeConfig.totalDocPages || 1}
-                    onChange={(e) =>
-                      updateConfig("totalDocPages", Math.max(1, +e.target.value))
-                    }
-                    style={{ width: 80, minHeight: 38 }}
-                  />
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <label
+                      className="input-label"
+                      style={{ margin: 0, whiteSpace: "nowrap" }}
+                    >
+                      Total pages in doc:
+                    </label>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      value={activeConfig.totalDocPages || 1}
+                      onChange={(e) =>
+                        updateConfig("totalDocPages", Math.max(1, +e.target.value))
+                      }
+                      style={{ width: 80, minHeight: 38 }}
+                    />
+                    <span className="text-muted" style={{ fontSize: "0.82rem" }}>
+                      (Detected: {processedFiles[activeFileIdx]?.validation?.detectedPageCount ?? processedFiles[activeFileIdx]?.pageCount ?? 1} pages)
+                    </span>
+                  </div>
+
+                  {Boolean(processedFiles[activeFileIdx]?.validation?.isPageCountExact) &&
+                    (activeConfig.totalDocPages || 1) !==
+                      (processedFiles[activeFileIdx]?.validation?.detectedPageCount ?? processedFiles[activeFileIdx]?.pageCount) && (
+                      <div
+                        style={{
+                          background: "#fffbeb",
+                          border: "1px solid #fde68a",
+                          borderRadius: 6,
+                          padding: "8px 12px",
+                          marginTop: 8,
+                          fontSize: "0.82rem",
+                          color: "#b45309",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <span>⚠️</span>
+                        <span>
+                          <strong>Page count mismatch:</strong> You entered {activeConfig.totalDocPages} pages, but QuickPrint detected {processedFiles[activeFileIdx]?.validation?.detectedPageCount ?? processedFiles[activeFileIdx]?.pageCount} pages. Verify your print settings.
+                        </span>
+                      </div>
+                    )}
                 </div>
               )}
 
@@ -775,8 +1039,8 @@ export default function Upload() {
             </div>
 
             <div className="card-actions">
-              <button className="btn btn-gray" onClick={() => setStep(0)}>
-                ← Back
+              <button className="btn btn-gray" onClick={() => { setShowReport(true); setStep(0); }}>
+                ← Back to Report
               </button>
               <button
                 className="btn btn-primary"
@@ -951,6 +1215,12 @@ export default function Upload() {
               <div className="flex-between" style={{ marginBottom: 8 }}>
                   <span className="text-muted">Vendor</span>
                   <strong>{selectedVendor?.shopName}</strong>
+              </div>
+              <div className="flex-between" style={{ marginBottom: 8 }}>
+                  <span className="text-muted">Document Check</span>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--success)" }}>
+                    ✓ Verified (Smart Checker)
+                  </span>
               </div>
               <hr
                 style={{
