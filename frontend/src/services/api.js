@@ -69,6 +69,7 @@ export const getVendorQueue = (vendorId) =>
 // ─── ADMIN & ANALYTICS ──────────────────────────────────
 export const getAdminAnalyticsSummary = () => api.get("/api/analytics/summary");
 export const getAllOrdersAdmin = () => api.get("/orders/admin/all");
+export const getAllVendorsAdmin = () => api.get("/vendor/admin/all");
 
 // ─── ML PREDICTIONS ──────────────────────────────────────
 export const getDemandPrediction = (data) => api.post("/api/ml/demand", data);

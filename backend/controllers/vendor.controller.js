@@ -238,3 +238,13 @@ exports.resetPassword = async (req, res) => {
   }
   return res.json(result);
 };
+
+// GET /vendor/admin/all - full vendor directory for admin dashboard
+exports.getAllVendorsAdmin = async (req, res) => {
+  try {
+    const vendors = await Vendor.find({}, { password: 0, resetPasswordToken: 0 }).sort({ createdAt: -1 });
+    return res.json(vendors);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};

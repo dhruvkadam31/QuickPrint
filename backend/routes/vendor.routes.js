@@ -15,6 +15,7 @@ router.post("/verify-reset-token", authLimiter, vendorController.verifyResetToke
 router.post("/reset-password", authLimiter, vendorController.resetPassword);
 
 router.get("/available", vendorController.getAvailableVendors);
+router.get("/admin/all", authMiddleware, requireRole("ADMIN"), vendorController.getAllVendorsAdmin);
 
 // Protected routes
 router.get("/:vendorId/orders", authMiddleware, requireRole("VENDOR", "ADMIN"), requireVendorOrAdmin(), vendorController.getVendorOrders);
