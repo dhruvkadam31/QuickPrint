@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { vendorLogout } from "../../services/api";
 import socket from "../../services/socket";
@@ -11,6 +12,7 @@ const NAV_LINKS = [
 ];
 
 export default function VendorLayout({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const vendorData = JSON.parse(localStorage.getItem("vendorData") || "{}");
@@ -22,35 +24,91 @@ export default function VendorLayout({ children }) {
     } catch {}
     localStorage.removeItem("vendorToken");
     localStorage.removeItem("vendorData");
+    setSidebarOpen(false);
     toast.success("Logged out");
     navigate("/vendor/login");
   };
 
+  const handleNavClick = (path) => {
+    navigate(path);
+    setSidebarOpen(false);
+  };
+
   return (
     <div className="vendor-layout">
-      {/* Sidebar */}
-      <aside className="vendor-sidebar">
-        <div className="sidebar-logo">🖨️ QuickPrint</div>
-        <div style={{ padding: "0 20px", marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>{vendorData.shopName}</div>
-          <div style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: 2 }}>{vendorData.name}</div>
+      {/* Mobile Top Header */}
+      <header className="vendor-mobile-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            className="vendor-mobile-toggle"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open vendor menu"
+          >
+            ☰
+          </button>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.2 }}>
+              🖨️ QuickPrint
+            </div>
+            <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: 2 }}>
+              {vendorData.shopName || "Vendor Portal"}
+            </div>
+          </div>
+        </div>
+        <button
+          className="btn btn-gray"
+          style={{ fontSize: "0.78rem", padding: "4px 10px", minHeight: 32 }}
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
+      </header>
+
+      {/* Mobile Backdrop Overlay */}
+      <div
+        className={`vendor-mobile-backdrop ${sidebarOpen ? "mobile-open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      {/* Sidebar Drawer */}
+      <aside className={`vendor-sidebar ${sidebarOpen ? "mobile-open" : ""}`}>
+        <div className="sidebar-logo">
+          <span>🖨️ QuickPrint</span>
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close vendor menu"
+          >
+            ✕
+          </button>
         </div>
 
-        {NAV_LINKS.map((l) => (
-          <button
-            key={l.path}
-            className={`sidebar-link ${location.pathname === l.path ? "active" : ""}`}
-            onClick={() => navigate(l.path)}
-          >
-            {l.label}
-          </button>
-        ))}
+        <div style={{ padding: "0 20px", marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+            {vendorData.shopName || "My Print Shop"}
+          </div>
+          <div style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: 2 }}>
+            {vendorData.name || "Vendor"}
+          </div>
+        </div>
 
-        <div style={{ marginTop: "auto", padding: "20px 20px 0" }}>
+        <nav style={{ display: "flex", flexDirection: "column" }}>
+          {NAV_LINKS.map((l) => (
+            <button
+              key={l.path}
+              className={`sidebar-link ${location.pathname === l.path ? "active" : ""}`}
+              onClick={() => handleNavClick(l.path)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </nav>
+
+        <div style={{ marginTop: "auto", padding: "20px 20px" }}>
           <button
             className="sidebar-link"
             onClick={handleLogout}
-            style={{ color: "#fca5a5", width: "100%" }}
+            style={{ color: "#fca5a5", width: "100%", borderRadius: 6 }}
           >
             🚪 Logout
           </button>

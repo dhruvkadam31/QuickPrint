@@ -193,7 +193,7 @@ export default function VendorOrders() {
         <div key={order.orderId} className="order-item">
 
           {/* Header: Order Code + User + Time */}
-          <div className="flex-between mb-8">
+          <div className="flex-between flex-wrap mb-8" style={{ gap: 8 }}>
             <div>
               <span className="fw-700" style={{ fontSize: "1.05rem" }}>
                 #{order.orderCode || order.orderId.slice(-4)}
@@ -213,7 +213,7 @@ export default function VendorOrders() {
           <PrintInstructions order={order} />
 
           {/* Price + Service */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 12, fontSize: "0.85rem" }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, fontSize: "0.85rem", flexWrap: "wrap" }}>
             <span style={{ background: "var(--brand-light)", color: "var(--brand)", borderRadius: 6, padding: "3px 10px", fontWeight: 600 }}>
               {order.serviceType}
             </span>
@@ -251,7 +251,7 @@ export default function VendorOrders() {
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {order.status === "Queued" && (
               <button
                 className="btn btn-primary"

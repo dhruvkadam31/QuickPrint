@@ -56,7 +56,7 @@ export default function VendorLogin() {
             />
           </div>
           <div className="form-group">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 4 }}>
               <label className="input-label" style={{ marginBottom: 0 }}>Password</label>
               <Link
                 to="/forgot-password?type=vendor"

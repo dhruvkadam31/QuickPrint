@@ -68,7 +68,7 @@ export default function VendorSettings() {
       <h2 style={{ marginBottom: 8 }}>Settings</h2>
       <p className="text-muted" style={{ marginBottom: 24 }}>Configure your shop pricing and availability</p>
 
-      <div className="card" style={{ maxWidth: 500 }}>
+      <div className="card" style={{ width: "100%", maxWidth: 520 }}>
         <h3 style={{ marginBottom: 16 }}>💰 Pricing</h3>
         <Field label="B&W Price per Page" value={bw} onChange={setBw} />
         <Field label="Color Price per Page" value={color} onChange={setColor} />
@@ -88,15 +88,15 @@ export default function VendorSettings() {
           <label className="input-label" htmlFor="ml-vendor-id">ML model vendor slot (1-5)</label>
           <input id="ml-vendor-id" className="input" type="number" min="1" max="5" step="1" value={mlVendorId} onChange={(event) => setMlVendorId(event.target.value)} />
         </div>
-        <label className="form-group" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={isExamPeriod} onChange={(event) => setIsExamPeriod(event.target.checked)} />
+        <label className="form-group" style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="checkbox" checked={isExamPeriod} onChange={(event) => setIsExamPeriod(event.target.checked)} style={{ width: 18, height: 18 }} />
           Exam period
         </label>
 
         <hr style={{ border: "none", borderTop: "1px solid var(--gray-200)", margin: "20px 0" }} />
 
         <h3 style={{ marginBottom: 16 }}>🏪 Shop Status</h3>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <button
             onClick={() => setShopOpen(true)}
             className={`btn ${shopOpen ? "btn-success" : "btn-gray"}`}

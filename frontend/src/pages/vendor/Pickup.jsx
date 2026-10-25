@@ -35,7 +35,7 @@ export default function VendorPickup() {
         Enter the customer's 6-digit OTP to confirm pickup
       </p>
 
-      <div className="card" style={{ maxWidth: 420 }}>
+      <div className="card" style={{ width: "100%", maxWidth: 420 }}>
         <div className="form-group">
           <label className="input-label">Customer OTP</label>
           <input
@@ -45,7 +45,13 @@ export default function VendorPickup() {
             placeholder="000000"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "1.4rem", letterSpacing: "8px", textAlign: "center" }}
+            style={{
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: "clamp(1.1rem, 4vw, 1.4rem)",
+              letterSpacing: "clamp(4px, 1.5vw, 8px)",
+              textAlign: "center",
+              minHeight: 46,
+            }}
           />
         </div>
         <button

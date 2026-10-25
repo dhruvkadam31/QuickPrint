@@ -362,27 +362,13 @@ export default function Upload() {
     <>
       <UserNavbar />
       <div className="page">
-        {/* Step Indicator */}
-        <div
-          style={{
-            display: "flex",
-            gap: 0,
-            marginBottom: 24,
-            background: "white",
-            borderRadius: 10,
-            overflow: "hidden",
-            boxShadow: "var(--shadow)",
-          }}
-        >
+        {/* Step Indicator — Desktop */}
+        <div className="stepper-desktop">
           {STEPS.map((s, i) => (
             <div
               key={i}
+              className="step-desktop-item"
               style={{
-                flex: 1,
-                padding: "12px 8px",
-                textAlign: "center",
-                fontSize: "0.8rem",
-                fontWeight: 600,
                 background:
                   i === step
                     ? "var(--brand)"
@@ -397,13 +383,61 @@ export default function Upload() {
                     : "var(--gray-400)",
                 borderRight:
                   i < STEPS.length - 1 ? "1px solid var(--gray-200)" : "none",
-                transition: "all 0.2s",
+                cursor: i < step ? "pointer" : "default",
               }}
+              onClick={() => { if (i < step) setStep(i); }}
             >
-              {i < step ? "✓ " : ""}
+              {i < step ? "✓ " : `${i + 1}. `}
               {s}
             </div>
           ))}
+        </div>
+
+        {/* Step Indicator — Mobile */}
+        <div className="stepper-mobile card" style={{ padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--brand)" }}>
+              Step {step + 1} of {STEPS.length}: {STEPS[step]}
+            </span>
+            <span style={{ fontSize: "0.78rem", color: "var(--gray-600)", fontWeight: 600 }}>
+              {Math.round(((step + 1) / STEPS.length) * 100)}%
+            </span>
+          </div>
+          <div style={{ height: 6, background: "var(--gray-200)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
+            <div
+              style={{
+                width: `${((step + 1) / STEPS.length) * 100}%`,
+                height: "100%",
+                background: "var(--brand)",
+                borderRadius: 3,
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 4, flexWrap: "wrap" }}>
+            {STEPS.map((s, idx) => (
+              <button
+                key={idx}
+                onClick={() => { if (idx < step) setStep(idx); }}
+                disabled={idx > step}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: "4px 2px",
+                  cursor: idx < step ? "pointer" : "default",
+                  fontSize: "0.75rem",
+                  fontWeight: idx === step ? 700 : 500,
+                  color: idx === step ? "var(--brand)" : idx < step ? "var(--success)" : "var(--gray-400)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+              >
+                <span>{idx < step ? "✓" : `${idx + 1}.`}</span>
+                <span>{s}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* STEP 0: Upload */}
@@ -561,7 +595,7 @@ export default function Upload() {
               </div>
 
               {activeConfig.pageOption === "All" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <label
                     className="input-label"
                     style={{ margin: 0, whiteSpace: "nowrap" }}
@@ -576,7 +610,7 @@ export default function Upload() {
                     onChange={(e) =>
                       updateConfig("totalDocPages", Math.max(1, +e.target.value))
                     }
-                    style={{ width: 80 }}
+                    style={{ width: 80, minHeight: 38 }}
                   />
                 </div>
               )}
@@ -626,6 +660,7 @@ export default function Upload() {
                       fontWeight: 600,
                       fontSize: "0.88rem",
                       cursor: "pointer",
+                      minHeight: 40,
                     }}
                   >
                     {n}
@@ -640,7 +675,7 @@ export default function Upload() {
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button
                   className="btn btn-gray"
-                  style={{ padding: "6px 14px", fontSize: "1.1rem" }}
+                  style={{ padding: "6px 14px", fontSize: "1.1rem", minHeight: 38 }}
                   onClick={() => updateConfig("quantity", Math.max(1, (activeConfig.quantity || 1) - 1))}
                 >
                   −
@@ -657,7 +692,7 @@ export default function Upload() {
                 </span>
                 <button
                   className="btn btn-gray"
-                  style={{ padding: "6px 14px", fontSize: "1.1rem" }}
+                  style={{ padding: "6px 14px", fontSize: "1.1rem", minHeight: 38 }}
                   onClick={() => updateConfig("quantity", (activeConfig.quantity || 1) + 1)}
                 >
                   +
@@ -666,13 +701,7 @@ export default function Upload() {
             </div>
 
             {/* Color + Sides + Orientation */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: 12,
-              }}
-            >
+            <div className="print-options-grid">
               <div className="form-group">
                 <label className="input-label">Color</label>
                 <select
@@ -745,7 +774,7 @@ export default function Upload() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="card-actions">
               <button className="btn btn-gray" onClick={() => setStep(0)}>
                 ← Back
               </button>
@@ -764,11 +793,11 @@ export default function Upload() {
         {/* STEP 2: Select Vendor */}
         {step === 2 && (
           <div className="card">
-            <div className="flex-between" style={{ marginBottom: 4 }}>
-              <h3>Available Vendors</h3>
+            <div className="flex-between flex-wrap" style={{ marginBottom: 6, gap: 10 }}>
+              <h3 style={{ margin: 0 }}>Available Vendors</h3>
               <button
                 className="btn btn-gray"
-                style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                style={{ fontSize: "0.8rem", padding: "6px 12px", minHeight: 32 }}
                 onClick={async () => {
                   setLoadingVendors(true);
                   try {
@@ -821,6 +850,8 @@ export default function Upload() {
                       justifyContent: "space-between",
                       alignItems: "center",
                       marginBottom: "8px",
+                      flexWrap: "wrap",
+                      gap: "8px",
                     }}
                   >
                     <div>
@@ -846,6 +877,7 @@ export default function Upload() {
                           borderRadius: "8px",
                           fontWeight: 600,
                           fontSize: "0.85rem",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         ~{waitInfo.estimated_wait_minutes} mins
@@ -879,7 +911,7 @@ export default function Upload() {
               );
             })}
 
-            <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
+            <div className="card-actions">
               <button className="btn btn-gray" onClick={() => setStep(1)}>
                 ← Back
               </button>
@@ -1023,7 +1055,9 @@ export default function Upload() {
                   border: "1px solid #ddd",
                   borderRadius: 8,
                   overflow: "hidden",
-                  height: "300px",
+                  height: "260px",
+                  width: "100%",
+                  maxWidth: "100%",
                 }}
               >
                 <iframe
@@ -1046,12 +1080,12 @@ export default function Upload() {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   checked={isChecked}
                   onChange={(e) => setIsChecked(e.target.checked)}
-                  style={{ marginTop: 4 }}
+                  style={{ marginTop: 4, width: 18, height: 18, flexShrink: 0 }}
                 />
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
@@ -1065,7 +1099,7 @@ export default function Upload() {
               </label>
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="card-actions">
               <button className="btn btn-gray" onClick={() => setStep(2)}>
                 ← Back
               </button>

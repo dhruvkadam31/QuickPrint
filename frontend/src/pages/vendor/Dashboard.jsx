@@ -76,9 +76,9 @@ export default function VendorDashboard() {
 
   return (
     <VendorLayout>
-      <div className="flex-between mb-16">
+      <div className="flex-between flex-wrap mb-16" style={{ gap: 12 }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <h2 style={{ margin: 0 }}>Dashboard</h2>
             <button
               onClick={async () => {
@@ -95,7 +95,7 @@ export default function VendorDashboard() {
                 background: "var(--brand-light)",
                 color: "var(--brand)",
                 border: "none",
-                padding: "4px 10px",
+                padding: "6px 12px",
                 borderRadius: "20px",
                 fontSize: "0.75rem",
                 fontWeight: "bold",
@@ -180,7 +180,7 @@ export default function VendorDashboard() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
               gap: 16,
             }}
           >
@@ -262,8 +262,8 @@ export default function VendorDashboard() {
         )}
         {recentOrders.map((o) => (
           <div key={o.orderId} className="order-item">
-            <div className="flex-between">
-              <div>
+            <div className="flex-between flex-wrap" style={{ gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
                 <span className="fw-600">{o.serviceType}</span>
                 <span className="text-muted" style={{ marginLeft: 8 }}>
                   {o.totalPages} pages · {o.color}

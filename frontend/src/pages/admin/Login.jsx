@@ -33,7 +33,8 @@ export default function AdminLogin() {
         alignItems: "center",
         justifyContent: "center",
         background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-        padding: 20,
+        padding: "clamp(12px, 3vw, 20px)",
+        width: "100%",
       }}
     >
       <div
@@ -43,7 +44,7 @@ export default function AdminLogin() {
           maxWidth: 420,
           background: "#ffffff",
           borderRadius: 12,
-          padding: 32,
+          padding: "clamp(20px, 5vw, 32px)",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
         }}
       >

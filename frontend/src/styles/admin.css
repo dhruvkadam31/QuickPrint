@@ -882,23 +882,35 @@
 /* ── Responsive media queries ── */
 @media (max-width: 768px) {
   .admin-navbar {
-    padding: 0 16px;
+    padding: 12px 16px;
     height: auto;
-    padding-top: 12px;
-    padding-bottom: 12px;
     flex-wrap: wrap;
     gap: 12px;
+  }
+
+  .admin-nav-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .admin-subnav-bar {
     padding: 0 16px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .admin-subnav-bar::-webkit-scrollbar {
+    display: none;
   }
 
   .admin-tab-btn {
     padding: 14px 12px;
     font-size: 0.82rem;
     white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .admin-container {
@@ -911,5 +923,95 @@
 
   .admin-quick-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-card {
+    padding: 18px 14px;
+  }
+
+  .admin-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .admin-filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-search-box {
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .admin-modal-card {
+    max-height: 94vh;
+  }
+
+  .admin-modal-header {
+    padding: 16px 18px;
+  }
+
+  .admin-modal-body {
+    padding: 18px 16px;
+  }
+
+  .admin-modal-footer {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-navbar {
+    padding: 10px 12px;
+  }
+
+  .admin-brand-title {
+    font-size: 1rem;
+  }
+
+  .admin-pulse-pill {
+    display: none;
+  }
+
+  .admin-container {
+    padding: 12px 8px;
+  }
+
+  .admin-quick-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-card {
+    padding: 14px 10px;
+  }
+
+  .admin-modal-backdrop {
+    padding: 8px;
+  }
+
+  .admin-modal-header {
+    padding: 12px 14px;
+  }
+
+  .admin-modal-body {
+    padding: 14px 12px;
+  }
+
+  .admin-modal-footer {
+    padding: 12px 14px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1600px) {
+  .admin-container {
+    max-width: 1440px;
+    margin: 0 auto;
   }
 }

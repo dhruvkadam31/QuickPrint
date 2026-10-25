@@ -164,12 +164,12 @@ export default function MyOrders() {
 
             return (
               <div key={o.orderId} className="order-item" style={{ position: "relative" }}>
-                <div className="flex-between mb-8">
-                  <div>
+                <div className="flex-between mb-8" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
                     <span style={{ fontWeight: 700 }}>
                       {sc.icon} {o.serviceType}
                     </span>
-                    <span className="text-muted" style={{ marginLeft: 8 }}>
+                    <span className="text-muted" style={{ marginLeft: 8, wordBreak: "break-word" }}>
                       {o.quantity} copies · {o.totalPages} pages · {o.color}
                     </span>
                   </div>
@@ -185,7 +185,7 @@ export default function MyOrders() {
                   </span>
                 </div>
 
-                <div className="flex-between">
+                <div className="flex-between" style={{ flexWrap: "wrap", gap: 8 }}>
                   <div>
                     <div className="text-muted">🏪 {o.vendorName}</div>
                     <div className="text-muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>
@@ -286,26 +286,11 @@ export default function MyOrders() {
 
       {/* Cancellation Modal */}
       {selectedOrderToCancel && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
+        <div className="modal-backdrop-custom" onClick={() => setSelectedOrderToCancel(null)}>
           <div
-            className="card"
+            className="modal-card-custom"
+            onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%",
-              maxWidth: 480,
-              margin: 16,
               boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
             }}
           >
@@ -320,15 +305,9 @@ export default function MyOrders() {
                 Reason for cancellation:
               </label>
               <select
+                className="input"
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  border: "1px solid #d1d5db",
-                  fontSize: "0.9rem",
-                }}
               >
                 <option value="Changed mind / Ordered by mistake">Changed mind / Ordered by mistake</option>
                 <option value="Estimated wait time is too long">Estimated wait time is too long</option>
@@ -338,7 +317,7 @@ export default function MyOrders() {
               </select>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <div className="card-actions" style={{ justifyContent: "flex-end" }}>
               <button
                 className="btn btn-gray"
                 onClick={() => setSelectedOrderToCancel(null)}
@@ -352,7 +331,7 @@ export default function MyOrders() {
                 disabled={cancelling}
                 style={{ background: "#dc2626", color: "#fff" }}
               >
-                {cancelling ? "Processing Refund..." : "Confirm Cancellation"}
+                {cancelling ? "Processing..." : "Confirm Cancellation"}
               </button>
             </div>
           </div>
