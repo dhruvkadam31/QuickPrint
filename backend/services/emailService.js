@@ -164,9 +164,72 @@ async function sendOrderCancellationEmail(order, userEmail, refundInfo = null) {
   return sendEmail({ to, subject, html });
 }
 
+/**
+ * 4. Password Reset Email
+ */
+async function sendPasswordResetEmail({ to, resetUrl, accountType = "CUSTOMER" }) {
+  const isVendor = accountType.toUpperCase() === "VENDOR";
+  const portalName = isVendor ? "Vendor Portal" : "Customer Portal";
+  const primaryColor = isVendor ? "#059669" : "#4F46E5";
+  const subject = `🔐 Reset Your QuickPrint ${isVendor ? "Vendor " : ""}Password`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 10px; padding: 28px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h2 style="color: ${primaryColor}; margin: 0; font-size: 24px;">
+          ${isVendor ? "🏪 QuickPrint Vendor Portal" : "🖨️ QuickPrint"}
+        </h2>
+        <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Smart Printing Platform</p>
+      </div>
+
+      <div style="background-color: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 24px; border: 1px solid #e2e8f0;">
+        <h3 style="color: #0f172a; margin-top: 0; font-size: 18px;">Password Reset Request</h3>
+        <p style="color: #334155; line-height: 1.6; margin-bottom: 12px;">
+          We received a request to reset the password for your QuickPrint ${portalName} account (<strong>${to}</strong>).
+        </p>
+        <p style="color: #334155; line-height: 1.6; margin-bottom: 20px;">
+          To reset your password, click the secure button below:
+        </p>
+
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${resetUrl}" style="background-color: ${primaryColor}; color: #ffffff; padding: 12px 28px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Reset My Password
+          </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 8px;">
+          Or copy and paste this link into your web browser:
+        </p>
+        <p style="word-break: break-all; font-size: 12px; background: #ffffff; padding: 10px; border-radius: 4px; border: 1px solid #cbd5e1; color: #3b82f6;">
+          <a href="${resetUrl}" style="color: #2563eb; text-decoration: none;">${resetUrl}</a>
+        </p>
+      </div>
+
+      <div style="border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 12px 16px; border-radius: 4px; margin-bottom: 20px;">
+        <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.5;">
+          <strong>Security Notice:</strong> This password reset link is valid for <strong>15 minutes</strong> and can only be used once. If you did not request this reset, no action is required and your account remains secure.
+        </p>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+      <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">
+        QuickPrint Platform • Academic & Campus Smart Printing
+      </p>
+    </div>
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html,
+    text: `Reset your QuickPrint password by opening this link in your browser: ${resetUrl}. This link is valid for 15 minutes. If you did not request this, please ignore this email.`,
+  });
+}
+
 module.exports = {
   sendEmail,
   sendOrderConfirmationEmail,
   sendOrderStatusUpdateEmail,
   sendOrderCancellationEmail,
+  sendPasswordResetEmail,
 };

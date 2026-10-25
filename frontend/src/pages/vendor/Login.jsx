@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { vendorLogin } from "../../services/api";
 import socket from "../../services/socket";
@@ -56,7 +56,22 @@ export default function VendorLogin() {
             />
           </div>
           <div className="form-group">
-            <label className="input-label">Password</label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <label className="input-label" style={{ marginBottom: 0 }}>Password</label>
+              <Link
+                to="/forgot-password?type=vendor"
+                style={{
+                  fontSize: "0.82rem",
+                  color: "var(--success)",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => (e.target.style.textDecoration = "underline")}
+                onMouseLeave={(e) => (e.target.style.textDecoration = "none")}
+              >
+                Forgot Password?
+              </Link>
+            </div>
             <div style={{ position: "relative" }}>
               <input
                 className="input"

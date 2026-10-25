@@ -26,11 +26,17 @@ api.interceptors.request.use(async (config) => {
 export const userRegister = (data) => api.post("/api/auth/register", data);
 export const userLogin = (data) => api.post("/api/auth/login", data);
 export const getUserProfile = () => api.get("/api/auth/me");
+export const customerForgotPassword = (email) => api.post("/api/auth/forgot-password", { email });
+export const customerVerifyResetToken = (token) => api.post("/api/auth/verify-reset-token", { token });
+export const customerResetPassword = (data) => api.post("/api/auth/reset-password", data);
 
 // ─── VENDOR ──────────────────────────────────────────────
 export const vendorRegister = (data) => api.post("/vendor/register", data);
 export const vendorLogin = (data) => api.post("/vendor/login", data);
 export const vendorLogout = (data) => api.post("/vendor/logout", data);
+export const vendorForgotPassword = (email) => api.post("/vendor/forgot-password", { email });
+export const vendorVerifyResetToken = (token) => api.post("/vendor/verify-reset-token", { token });
+export const vendorResetPassword = (data) => api.post("/vendor/reset-password", data);
 
 export const getAvailableVendors = () => api.get("/vendor/available");
 export const getVendorOrders = (vendorId) =>

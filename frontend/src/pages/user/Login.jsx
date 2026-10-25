@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { userRegister, userLogin } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
@@ -116,6 +116,24 @@ export default function UserLogin() {
             placeholder="••••••••"
             disabled={loading}
           />
+
+          {tab === "signin" && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -6, marginBottom: 14 }}>
+              <Link
+                to="/forgot-password?type=customer"
+                style={{
+                  fontSize: "0.84rem",
+                  color: "var(--brand)",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => (e.target.style.textDecoration = "underline")}
+                onMouseLeave={(e) => (e.target.style.textDecoration = "none")}
+              >
+                Forgot Password?
+              </Link>
+            </div>
+          )}
 
           {tab === "signup" && (
             <PasswordField

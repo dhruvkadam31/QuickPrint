@@ -21,8 +21,17 @@ const vendorSchema = new mongoose.Schema(
     printerSpeedPpm: { type: Number, min: 10, max: 60, default: 30 },
     mlVendorId: { type: Number, min: 1, max: 5, default: 1 },
     isExamPeriod: { type: Boolean, default: false },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+    passwordChangedAt: { type: Date },
   },
   { timestamps: true }
 );
+
+// Compare plain password to hash
+vendorSchema.methods.comparePassword = async function (plain) {
+  const bcrypt = require("bcryptjs");
+  return bcrypt.compare(plain, this.password);
+};
 
 module.exports = mongoose.model("Vendor", vendorSchema);

@@ -17,6 +17,10 @@ import VendorSettings from "./pages/vendor/Settings";
 import AdminLogin from "./pages/admin/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
 
+// Auth recovery pages
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
+
 // Route guards
 function UserRoute({ children }) {
   const { user } = useAuth();
@@ -52,6 +56,10 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+
+      {/* Auth Recovery Routes */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

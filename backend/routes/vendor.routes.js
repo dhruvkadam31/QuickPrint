@@ -3,11 +3,16 @@ const router = express.Router();
 const vendorController = require("../controllers/vendor.controller");
 const authMiddleware = require("../middleware/auth");
 const { requireRole, requireVendorOrAdmin } = require("../middleware/authorization");
-const { authLimiter } = require("../middleware/rateLimiter");
+const { authLimiter, passwordResetLimiter } = require("../middleware/rateLimiter");
 
 router.post("/register", authLimiter, vendorController.registerVendor);
 router.post("/login", authLimiter, vendorController.loginVendor);
 router.post("/logout", authMiddleware, requireRole("VENDOR"), vendorController.logoutVendor);
+
+// Password reset
+router.post("/forgot-password", passwordResetLimiter, vendorController.forgotPassword);
+router.post("/verify-reset-token", authLimiter, vendorController.verifyResetToken);
+router.post("/reset-password", authLimiter, vendorController.resetPassword);
 
 router.get("/available", vendorController.getAvailableVendors);
 

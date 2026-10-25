@@ -198,3 +198,43 @@ exports.logoutVendor = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// POST /vendor/forgot-password
+exports.forgotPassword = async (req, res) => {
+  const passwordResetService = require("../services/passwordResetService");
+  const { email } = req.body;
+  const result = await passwordResetService.requestPasswordReset({
+    email,
+    accountType: "VENDOR",
+  });
+  return res.json(result);
+};
+
+// POST /vendor/verify-reset-token
+exports.verifyResetToken = async (req, res) => {
+  const passwordResetService = require("../services/passwordResetService");
+  const { token } = req.body;
+  const result = await passwordResetService.verifyResetToken({
+    token,
+    accountType: "VENDOR",
+  });
+  if (!result.valid) {
+    return res.status(400).json(result);
+  }
+  return res.json(result);
+};
+
+// POST /vendor/reset-password
+exports.resetPassword = async (req, res) => {
+  const passwordResetService = require("../services/passwordResetService");
+  const { token, password } = req.body;
+  const result = await passwordResetService.resetPassword({
+    token,
+    password,
+    accountType: "VENDOR",
+  });
+  if (!result.success) {
+    return res.status(result.status || 400).json({ error: result.error });
+  }
+  return res.json(result);
+};

@@ -84,4 +84,51 @@ async function me(req, res) {
   }
 }
 
-module.exports = { register, login, me };
+// POST /api/auth/forgot-password
+async function forgotPassword(req, res) {
+  const passwordResetService = require("../services/passwordResetService");
+  const { email } = req.body;
+  const result = await passwordResetService.requestPasswordReset({
+    email,
+    accountType: "CUSTOMER",
+  });
+  return res.json(result);
+}
+
+// POST /api/auth/verify-reset-token
+async function verifyResetToken(req, res) {
+  const passwordResetService = require("../services/passwordResetService");
+  const { token } = req.body;
+  const result = await passwordResetService.verifyResetToken({
+    token,
+    accountType: "CUSTOMER",
+  });
+  if (!result.valid) {
+    return res.status(400).json(result);
+  }
+  return res.json(result);
+}
+
+// POST /api/auth/reset-password
+async function resetPassword(req, res) {
+  const passwordResetService = require("../services/passwordResetService");
+  const { token, password } = req.body;
+  const result = await passwordResetService.resetPassword({
+    token,
+    password,
+    accountType: "CUSTOMER",
+  });
+  if (!result.success) {
+    return res.status(result.status || 400).json({ error: result.error });
+  }
+  return res.json(result);
+}
+
+module.exports = {
+  register,
+  login,
+  me,
+  forgotPassword,
+  verifyResetToken,
+  resetPassword,
+};

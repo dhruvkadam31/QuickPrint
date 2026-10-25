@@ -24,7 +24,20 @@ const authLimiter = rateLimit({
   },
 });
 
+// Password reset rate limiter: max 5 requests per 15 mins to prevent email flooding
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many password reset requests from this IP, please try again after 15 minutes.",
+  },
+});
+
 module.exports = {
   apiLimiter,
   authLimiter,
+  passwordResetLimiter,
 };
