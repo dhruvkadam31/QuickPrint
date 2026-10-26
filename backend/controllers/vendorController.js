@@ -14,33 +14,7 @@ async function getVendors(req, res) {
       vendors = await vendorsCollection.find({}).toArray();
     }
 
-    if (vendors.length === 0) {
-      // Fallback default vendors
-      vendors = [
-        {
-          vendorId: "VEN001",
-          name: "Campus Print Shop",
-          email: "vendor1@quickprint.com",
-          phone: "+91 9876543210",
-          address: "Central Library Building, Ground Floor",
-          services: ["Print", "Lamination", "Photo Binding"],
-          shopOpen: true,
-          currentQueue: 0,
-          estimatedWaitTime: 5,
-        },
-        {
-          vendorId: "VEN002",
-          name: "Express Digital Printers",
-          email: "vendor2@quickprint.com",
-          phone: "+91 9876543211",
-          address: "Student Center, Block B",
-          services: ["Print", "Lamination"],
-          shopOpen: true,
-          currentQueue: 0,
-          estimatedWaitTime: 10,
-        },
-      ];
-    }
+
 
     // Attach real-time queue count from orders collection
     const activeOrders = await ordersCollection

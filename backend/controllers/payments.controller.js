@@ -3,7 +3,7 @@ const Vendor = require("../models/Vendor");
 const PaymentAttempt = require("../models/PaymentAttempt");
 const razorpay = require("../services/razorpayService");
 const crypto = require("crypto");
-const { sendOrderConfirmationEmail } = require("../services/emailService");
+const { sendOrderConfirmationEmail, sendVendorNewOrderAlertEmail } = require("../services/emailService");
 const { predictWaitTime } = require("../services/mlPredictionService");
 const { calculatePaymentAmount, verifyRazorpaySignature } = require("../services/paymentUtils");
 
@@ -218,6 +218,16 @@ async function createOrderFromAttempt(attempt, paymentId) {
   sendOrderConfirmationEmail(order, attempt.userEmail).catch((error) =>
     console.warn("Order email failed:", error.message)
   );
+
+  // Notify the assigned vendor asynchronously
+  Vendor.findById(order.vendorId).then((vendor) => {
+    if (vendor?.email) {
+      sendVendorNewOrderAlertEmail(order, vendor.email).catch((e) =>
+        console.warn("Vendor alert email failed:", e.message)
+      );
+    }
+  }).catch(() => {});
+
   return order;
 }
 

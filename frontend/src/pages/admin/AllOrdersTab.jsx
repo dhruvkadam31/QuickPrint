@@ -232,7 +232,7 @@ export default function AllOrdersTab({ orders = [], loading = false, onViewOrder
                     </td>
                     <td>
                       <div style={{ fontWeight: 600, color: "#334155" }}>
-                        {o.vendorName || "Campus Print Hub"}
+                        {o.vendorName || "—"}
                       </div>
                     </td>
                     <td>

@@ -101,31 +101,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Seed default vendor if database has no vendors
-async function seedDefaultVendor() {
-  try {
-    const Vendor = require("./models/Vendor");
-    const count = await Vendor.countDocuments();
-    if (count === 0) {
-      const hashedPassword = await bcrypt.hash("vendor123", 10);
-      await Vendor.create({
-        name: "Campus Print Station",
-        email: "vendor@quickprint.com",
-        password: hashedPassword,
-        shopName: "QuickPrint Campus Hub",
-        phone: "9876543210",
-        isOnline: true,
-        shopOpen: true,
-        bwPricePerPage: 1.5,
-        colorPricePerPage: 5.0,
-        bindingPrice: 20.0,
-      });
-      console.log("🌱 Default vendor seeded: vendor@quickprint.com / vendor123");
-    }
-  } catch (err) {
-    console.warn("Vendor seed note:", err.message);
-  }
-}
+const { verifySmtpConnection } = require("./services/emailService");
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/quickprint";
@@ -135,7 +111,7 @@ mongoose
   .connect(MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB connected successfully");
-    await seedDefaultVendor();
+    await verifySmtpConnection();
     server.listen(PORT, () => {
       console.log(`🚀 QuickPrint Server running on port ${PORT}`);
     });

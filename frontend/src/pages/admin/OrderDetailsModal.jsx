@@ -97,7 +97,7 @@ export default function OrderDetailsModal({ order, onClose, onRefresh }) {
 
             <div className="detail-item">
               <div className="detail-item-label">Fulfilling Print Shop</div>
-              <div className="detail-item-value">{order.vendorName || "Campus Print Hub"}</div>
+              <div className="detail-item-value">{order.vendorName || "—"}</div>
               <div style={{ fontSize: "0.78rem", color: "var(--admin-text-muted)" }}>
                 Vendor ID: {String(order.vendorId)}
               </div>

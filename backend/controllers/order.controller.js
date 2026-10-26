@@ -5,7 +5,9 @@ const { processRefund } = require("../services/refundService");
 const {
   sendOrderConfirmationEmail,
   sendOrderStatusUpdateEmail,
+  sendOrderPickedUpEmail,
   sendOrderCancellationEmail,
+  sendVendorNewOrderAlertEmail,
 } = require("../services/emailService");
 
 // Generate 6-digit OTP
@@ -154,9 +156,17 @@ exports.createOrder = async (req, res) => {
     });
 
     // Send confirmation email asynchronously (fail-safe)
-    sendOrderConfirmationEmail(order, userEmail).catch((e) =>
+    const recipientEmail = req.user?.email || order.userEmail;
+    sendOrderConfirmationEmail(order, recipientEmail).catch((e) =>
       console.warn("Non-fatal email error:", e.message)
     );
+
+    // Send new order alert to vendor if email available
+    if (vendor?.email) {
+      sendVendorNewOrderAlertEmail(order, vendor.email).catch((e) =>
+        console.warn("Non-fatal vendor alert email error:", e.message)
+      );
+    }
 
     // Emit to socket
     const io = req.app.get("io");
@@ -325,6 +335,11 @@ exports.verifyOTP = async (req, res) => {
     order.otpUsed = true;
     order.pickedUpAt = new Date();
     await order.save();
+
+    // Send order completion/receipt email to user
+    sendOrderPickedUpEmail(order, order.userEmail).catch((e) =>
+      console.warn("Non-fatal email error:", e.message)
+    );
 
     const io = req.app.get("io");
     if (io) {

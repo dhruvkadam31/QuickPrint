@@ -144,7 +144,7 @@ async function recordCompletedOrderMetrics(order) {
 
     const trainingSample = {
       orderId: order.orderId,
-      vendorId: order.vendorId || "VEN001",
+      vendorId: order.vendorId || null,
       totalPages: order.totalPages || (order.pageCount * (order.quantity || 1)) || 1,
       color: order.color || "B&W",
       sides: order.sides || "Single",

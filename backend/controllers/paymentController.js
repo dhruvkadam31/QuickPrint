@@ -43,7 +43,7 @@ async function initiateOrder(req, res) {
       tempOrderId,
       userId,
       userEmail: userEmail || req.user?.email || "",
-      vendorId: vendorId || "VEN001",
+      vendorId: vendorId || null,
       serviceType,
       fileUrl: fileUrl || (files && files[0] ? files[0].url : ""),
       files: files || (fileUrl ? [{ url: fileUrl, name: "document.pdf", pageCount: pageCount || 1 }] : []),
