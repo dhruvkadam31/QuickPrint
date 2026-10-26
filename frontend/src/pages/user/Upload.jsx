@@ -273,14 +273,19 @@ export default function Upload() {
       }
 
       const razorpay = new window.Razorpay({
-        key: initiation.data.key,
+        key: initiation.data.key || import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_RKzZtAQI0tPHeC",
         amount: initiation.data.amount,
-        currency: initiation.data.currency,
+        currency: initiation.data.currency || "INR",
         order_id: initiation.data.razorpayOrderId,
         name: "QuickPrint",
+        description: `Order Printing - ${selectedVendor?.shopName || "Print Partner"}`,
+        theme: {
+          color: "#4F46E5",
+        },
         prefill: {
-          name: user?.name || "Customer",
-          email: user?.email || "customer@example.com"
+          name: user?.name || user?.displayName || "Student",
+          email: user?.email || "customer@example.com",
+          contact: user?.phone || "",
         },
         handler: async (response) => {
           try {
@@ -291,7 +296,7 @@ export default function Upload() {
               razorpaySignature: response.razorpay_signature,
             });
             setOrderDone(result.data);
-            toast.success("Order placed");
+            toast.success("Order placed 🎉");
             window.sessionStorage.clear(); // Clear storage on success
           } catch (error) {
             toast.error(error.response?.data?.error || "Payment verification failed");
@@ -299,10 +304,15 @@ export default function Upload() {
             setPaying(false);
           }
         },
-        modal: { ondismiss: () => setPaying(false) },
+        modal: {
+          ondismiss: () => {
+            setPaying(false);
+            toast("Payment cancelled", { icon: "ℹ️" });
+          },
+        },
       });
-      razorpay.on("payment.failed", () => {
-        toast.error("Payment failed. No order was created.");
+      razorpay.on("payment.failed", (res) => {
+        toast.error(res.error?.description || "Payment failed. No order was created.");
         setPaying(false);
       });
       razorpay.open();
@@ -314,6 +324,7 @@ export default function Upload() {
 
   const loadRazorpayScript = () =>
     new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
       script.onload = () => resolve(true);
