@@ -28,7 +28,7 @@ exports.uploadFile = async (req, res) => {
       processingResults.push(await documentProcessor.processDocument(file));
     }
     const first = processingResults[0];
-    const pageCount = processingResults.reduce((total, result) => total + (result.pageCount || 0), 0);
+    const pageCount = processingResults.reduce((total, result) => total + result.pageCount, 0);
 
     res.json({
       success: true,
@@ -44,7 +44,6 @@ exports.uploadFile = async (req, res) => {
         fileSize: result.fileSize,
         mimeType: result.mimeType,
         metadata: result.metadata,
-        validation: result.validation,
       })),
     });
   } catch (err) {
@@ -63,61 +62,6 @@ exports.uploadFile = async (req, res) => {
       error: "File processing failed",
       details: err.message,
     });
-  }
-};
-
-// POST /orders/validate - recheck or validate an existing uploaded file
-exports.validateDocument = async (req, res) => {
-  try {
-    const documentValidator = require("../services/documentValidator");
-    const path = require("path");
-    const { filename, enteredPageCount, forceRecheck } = req.body;
-
-    if (!filename) {
-      return res.status(400).json({ error: "Filename is required" });
-    }
-
-    const safeFilename = path.basename(filename);
-    const filePath = path.join(__dirname, "../uploads", safeFilename);
-
-    const fs = require("fs-extra");
-    if (!(await fs.pathExists(filePath))) {
-      return res.status(404).json({ error: "File not found" });
-    }
-
-    const stat = await fs.stat(filePath);
-    const report = await documentValidator.validateDocument(
-      {
-        path: filePath,
-        filename: safeFilename,
-        originalname: safeFilename,
-        size: stat.size,
-      },
-      {
-        enteredPageCount: enteredPageCount ? Number(enteredPageCount) : null,
-        forceRecheck: Boolean(forceRecheck),
-      }
-    );
-
-    res.json({ success: true, validation: report });
-  } catch (err) {
-    console.error("❌ Document validation failed:", err);
-    res.status(500).json({ error: "Validation failed", details: err.message });
-  }
-};
-
-// POST /orders/remove-file - remove an uploaded file (e.g. when replaced)
-exports.removeUploadedFile = async (req, res) => {
-  try {
-    const { filename } = req.body;
-    if (filename) {
-      const path = require("path");
-      const safeFilename = path.basename(filename);
-      await documentProcessor.cleanup(safeFilename);
-    }
-    res.json({ success: true, message: "File removed" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to remove file" });
   }
 };
 

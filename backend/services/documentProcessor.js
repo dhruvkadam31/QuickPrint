@@ -23,92 +23,47 @@ class DocumentProcessor {
   /**
    * Main processing pipeline
    * @param {Object} file - Multer file object
-   * @param {Object} options - Optional validation options
    * @returns {Promise<Object>} Processing result
    */
-  async processDocument(file, options = {}) {
-    const documentValidator = require('./documentValidator');
+  async processDocument(file) {
     try {
       console.log(`🔄 Processing file: ${file.originalname}`);
 
-      // Step 1: Validate file using Smart Document Validator
-      const validation = await documentValidator.validateDocument(file, options);
-      const publicBaseUrl = (
-        process.env.PUBLIC_API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`
-      ).replace(/\/$/, '');
-
-      // If document validation critically failed, return structured failure report
-      if (validation.overallStatus === 'FAILED') {
-        return {
-          success: false,
-          originalName: file.originalname,
-          filename: file.filename,
-          fileUrl: `${publicBaseUrl}/uploads/${file.filename}`,
-          processedUrl: null,
-          thumbnailUrl: null,
-          pageCount: 0,
-          fileSize: file.size || 0,
-          metadata: {},
-          mimeType: file.mimetype,
-          validation,
-          error: validation.errors[0] || 'Document validation failed'
-        };
+      // Step 1: Validate file
+      const validation = await this.validateFile(file);
+      if (!validation.valid) {
+        throw new Error(`Invalid file: ${validation.error}`);
       }
 
       // Step 2: Convert to PDF if needed
-      let pdfPath = null;
-      try {
-        pdfPath = await this.convertToPDF(file);
-      } catch (convErr) {
-        console.warn('Conversion warning/fallback:', convErr.message);
-        pdfPath = file.path;
-      }
+      const pdfPath = await this.convertToPDF(file);
 
-      // Step 3: Count pages (use validated page count if available)
-      let pageCount = validation.detectedPageCount;
-      if (pageCount === null || pageCount === undefined) {
-        try {
-          pageCount = await this.countPages(pdfPath);
-        } catch {
-          pageCount = 1;
-        }
-      }
+      // Step 3: Count pages
+      const pageCount = await this.countPages(pdfPath);
 
-      // Step 4: Generate thumbnail/preview for images
-      let thumbnailPath = null;
-      try {
-        thumbnailPath = await this.generateThumbnail(pdfPath, file.filename, file);
-      } catch (thumbErr) {
-        console.warn('Thumbnail generation note:', thumbErr.message);
-      }
+      // Step 4: Generate thumbnail/preview
+      const thumbnailPath = await this.generateThumbnail(pdfPath, file.filename);
 
-      // Step 5: Optimize file size if PDF
-      let optimizedPath = pdfPath;
-      if (pdfPath && pdfPath.endsWith('.pdf')) {
-        optimizedPath = await this.optimizeFile(pdfPath, file.filename);
-      }
+      // Step 5: Optimize file size
+      const optimizedPath = await this.optimizeFile(pdfPath, file.filename);
 
       // Step 6: Generate metadata
-      const metadata = pdfPath && pdfPath.endsWith('.pdf') ? await this.extractMetadata(pdfPath) : {};
-
-      const fileSize = (await fs.pathExists(optimizedPath))
-        ? (await fs.stat(optimizedPath)).size
-        : (file.size || 0);
+      const metadata = await this.extractMetadata(pdfPath);
+      const publicBaseUrl = (
+        process.env.PUBLIC_API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`
+      ).replace(/\/$/, '');
 
       return {
         success: true,
         originalName: file.originalname,
         filename: file.filename,
         fileUrl: `${publicBaseUrl}/uploads/${file.filename}`,
-        processedUrl: (await fs.pathExists(optimizedPath))
-          ? `${publicBaseUrl}/processed/${path.basename(optimizedPath)}`
-          : `${publicBaseUrl}/uploads/${file.filename}`,
+        processedUrl: `${publicBaseUrl}/processed/${path.basename(optimizedPath)}`,
         thumbnailUrl: thumbnailPath ? `${publicBaseUrl}/processed/${path.basename(thumbnailPath)}` : null,
-        pageCount: pageCount || 1,
-        fileSize,
+        pageCount,
+        fileSize: fs.statSync(optimizedPath).size,
         metadata,
         mimeType: file.mimetype,
-        validation,
         processedAt: new Date().toISOString()
       };
 
@@ -261,24 +216,8 @@ class DocumentProcessor {
   /**
    * Generate thumbnail/preview image
    */
-  async generateThumbnail(pdfPath, filename, file) {
-    try {
-      const ext = path.extname(file?.originalname || filename || '').toLowerCase();
-      const thumbFilename = `${filename}_thumb.jpg`;
-      const thumbPath = path.join(this.processedDir, thumbFilename);
-
-      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'].includes(ext) && file?.path) {
-        await sharp(file.path)
-          .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 85 })
-          .toFile(thumbPath);
-        return thumbPath;
-      }
-      return null;
-    } catch (err) {
-      console.warn('Thumbnail generation skipped:', err.message);
-      return null;
-    }
+  async generateThumbnail(pdfPath, filename) {
+    return null;
   }
 
   /**
@@ -306,39 +245,21 @@ class DocumentProcessor {
   async extractMetadata(pdfPath) {
     try {
       const dataBuffer = await fs.readFile(pdfPath);
-      let title = '', author = '', subject = '', creator = '', producer = '', creationDate = null, pages = 1;
-      try {
-        const pdfDoc = await PDFDocument.load(dataBuffer, { ignoreEncryption: true });
-        title = pdfDoc.getTitle() || '';
-        author = pdfDoc.getAuthor() || '';
-        subject = pdfDoc.getSubject() || '';
-        creator = pdfDoc.getCreator() || '';
-        producer = pdfDoc.getProducer() || '';
-        creationDate = pdfDoc.getCreationDate() || null;
-        pages = pdfDoc.getPageCount();
-      } catch (e) {
-        try {
-          const data = await pdfParse(dataBuffer);
-          title = data.info?.Title || '';
-          author = data.info?.Author || '';
-          subject = data.info?.Subject || '';
-          creator = data.info?.Creator || '';
-          producer = data.info?.Producer || '';
-          creationDate = data.info?.CreationDate || null;
-          pages = data.numpages || 1;
-        } catch {}
-      }
+      const data = await pdfParse(dataBuffer);
 
       return {
-        title,
-        author,
-        subject,
-        creator,
-        producer,
-        creationDate,
-        pages,
+        title: data.info?.Title || '',
+        author: data.info?.Author || '',
+        subject: data.info?.Subject || '',
+        creator: data.info?.Creator || '',
+        producer: data.info?.Producer || '',
+        creationDate: data.info?.CreationDate || null,
+        modificationDate: data.info?.ModDate || null,
+        pages: data.numpages,
+        text: data.text?.substring(0, 1000) || '', // First 1000 chars for preview
       };
     } catch (error) {
+      console.warn('Metadata extraction failed:', error);
       return {};
     }
   }

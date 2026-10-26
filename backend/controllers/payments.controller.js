@@ -45,32 +45,6 @@ async function initiatePayment(req, res) {
       return res.status(400).json({ success: false, error: "A valid uploaded file URL is required" });
     }
 
-    // Authoritative Server-side Document Validation Check
-    const path = require("path");
-    const fs = require("fs-extra");
-    const filesToCheck = files.length > 0 ? files : [{ fileUrl, originalName: originalFileName }];
-    for (const f of filesToCheck) {
-      if (f.validation && f.validation.overallStatus === "FAILED") {
-        return res.status(400).json({
-          success: false,
-          error: `Document "${f.originalName || 'file'}" failed document validation and cannot be processed for printing.`
-        });
-      }
-      try {
-        const u = new URL(f.fileUrl, "http://localhost");
-        const filename = path.basename(u.pathname);
-        const diskPath = path.join(__dirname, "../uploads", filename);
-        if (await fs.pathExists(diskPath)) {
-          const stat = await fs.stat(diskPath);
-          if (stat.size === 0) {
-            return res.status(400).json({ success: false, error: `Document "${f.originalName || filename}" is empty (0 bytes).` });
-          }
-        }
-      } catch (e) {
-        // URL fallback
-      }
-    }
-
     const pages = Number(pageCount);
     const copies = Number(quantity);
     const sheetCount = Number(pagesPerSheet);
