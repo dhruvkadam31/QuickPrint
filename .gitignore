@@ -4,3 +4,19 @@ dist/
 uploads/
 *.log
 .DS_Store
+
+# Python virtual environments
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+ml-services/venv/
+ml-services/__pycache__/
+
+# Backend generated files
+backend/processed/
+backend/uploads/
