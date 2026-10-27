@@ -86,6 +86,7 @@ export default function Upload() {
   const [selectedVendor, setSelectedVendor] = useSessionState("qp_selectedVendor", null);
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [waitTimeData, setWaitTimeData] = useState({});
+  const [expandedPriceVendorId, setExpandedPriceVendorId] = useState(null);
   // Payment
   const [paying, setPaying] = useState(false);
   const [orderDone, setOrderDone] = useState(null);
@@ -100,21 +101,30 @@ export default function Upload() {
     effectivePageCount += pages * cfg.quantity;
   });
 
-  const getEstimatedPrice = (vendor) => {
-    let price = 0;
-
-    fileConfigs.forEach((cfg) => {
+  const getPriceBreakdown = (vendor) =>
+    fileConfigs.map((cfg, index) => {
       const pages = cfg.pageOption === "All" ? cfg.totalDocPages : (parseCustomPages(cfg.customPages) || 0);
-      const sheets = Math.ceil(pages / cfg.pagesPerSheet) || 0;
+      const pagesPerSheet = cfg.pagesPerSheet || 1;
+      const sheetsPerCopy = Math.ceil(pages / pagesPerSheet) || 0;
+      const copies = cfg.quantity || 1;
       const rate = cfg.color === "Color"
         ? vendor?.colorPricePerPage ?? 5
         : vendor?.bwPricePerPage ?? 1.5;
 
-      price += sheets * cfg.quantity * rate;
+      return {
+        name: processedFiles[index]?.originalName || `Document ${index + 1}`,
+        pages,
+        pagesPerSheet,
+        sheetsPerCopy,
+        copies,
+        color: cfg.color || "B&W",
+        rate,
+        total: Math.round(sheetsPerCopy * copies * rate * 100) / 100,
+      };
     });
 
-    return +price.toFixed(2);
-  };
+  const getEstimatedPrice = (vendor) =>
+    +getPriceBreakdown(vendor).reduce((total, item) => total + item.total, 0).toFixed(2);
 
   const estimatedPrice = getEstimatedPrice(selectedVendor);
 
@@ -858,7 +868,14 @@ export default function Upload() {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-                      <div
+                      <button
+                        type="button"
+                        aria-expanded={expandedPriceVendorId === v._id}
+                        aria-controls={`price-breakdown-${v._id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpandedPriceVendorId((current) => current === v._id ? null : v._id);
+                        }}
                         style={{
                           background: "var(--brand-light)",
                           color: "var(--brand)",
@@ -866,11 +883,17 @@ export default function Upload() {
                           borderRadius: "8px",
                           textAlign: "right",
                           whiteSpace: "nowrap",
+                          border: 0,
+                          cursor: "pointer",
+                          font: "inherit",
                         }}
                       >
                         <div style={{ fontSize: "0.75rem" }}>Estimated total</div>
                         <strong>₹{getEstimatedPrice(v)}</strong>
-                      </div>
+                        <div style={{ fontSize: "0.72rem", textDecoration: "underline" }}>
+                          {expandedPriceVendorId === v._id ? "Hide breakdown" : "View breakdown"}
+                        </div>
+                      </button>
                       <div
                         style={{
                           background: "#f0fdf4",
@@ -888,6 +911,45 @@ export default function Upload() {
                       </div>
                     </div>
                   </div>
+
+                  {expandedPriceVendorId === v._id && (
+                    <div
+                      id={`price-breakdown-${v._id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      style={{
+                        background: "var(--gray-50)",
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 10,
+                        fontSize: "0.82rem",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                        How this estimate is calculated
+                      </div>
+                      {getPriceBreakdown(v).map((item, index) => (
+                        <div
+                          key={`${v._id}-${index}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            padding: "5px 0",
+                            borderBottom: "1px solid var(--gray-200)",
+                          }}
+                        >
+                          <span>
+                            {item.name}: ceil({item.pages} pages ÷ {item.pagesPerSheet}) × {item.copies}{" "}
+                            {item.copies === 1 ? "copy" : "copies"} × ₹{item.rate} ({item.color})
+                          </span>
+                          <strong style={{ whiteSpace: "nowrap" }}>₹{item.total.toFixed(2)}</strong>
+                        </div>
+                      ))}
+                      <div style={{ marginTop: 8, color: "var(--gray-500)" }}>
+                        Sheets per copy are rounded up. The estimate uses this vendor’s rate for each file’s selected print color.
+                      </div>
+                    </div>
+                  )}
 
                   {waitInfo && (
                     <>
