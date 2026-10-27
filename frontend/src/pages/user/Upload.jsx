@@ -93,29 +93,30 @@ export default function Upload() {
 
   const fileInputRef = useRef();
 
-  const getPricePerPage = (c) => selectedVendor
-    ? c === "Color"
-      ? selectedVendor.colorPricePerPage
-      : selectedVendor.bwPricePerPage
-    : c === "Color"
-    ? 5
-    : 1.5;
-
   let effectivePageCount = 0;
-  let totalSheets = 0;
-  let estimatedPrice = 0;
 
-  fileConfigs.forEach(cfg => {
+  fileConfigs.forEach((cfg) => {
     const pages = cfg.pageOption === "All" ? cfg.totalDocPages : (parseCustomPages(cfg.customPages) || 0);
-    effectivePageCount += (pages * cfg.quantity);
-    
-    const sheets = Math.ceil(pages / cfg.pagesPerSheet) || 0;
-    const itemTotalSheets = sheets * cfg.quantity;
-    totalSheets += itemTotalSheets;
-    
-    estimatedPrice += itemTotalSheets * getPricePerPage(cfg.color);
+    effectivePageCount += pages * cfg.quantity;
   });
-  estimatedPrice = +estimatedPrice.toFixed(2);
+
+  const getEstimatedPrice = (vendor) => {
+    let price = 0;
+
+    fileConfigs.forEach((cfg) => {
+      const pages = cfg.pageOption === "All" ? cfg.totalDocPages : (parseCustomPages(cfg.customPages) || 0);
+      const sheets = Math.ceil(pages / cfg.pagesPerSheet) || 0;
+      const rate = cfg.color === "Color"
+        ? vendor?.colorPricePerPage ?? 5
+        : vendor?.bwPricePerPage ?? 1.5;
+
+      price += sheets * cfg.quantity * rate;
+    });
+
+    return +price.toFixed(2);
+  };
+
+  const estimatedPrice = getEstimatedPrice(selectedVendor);
 
   // Step 3: load vendors
   useEffect(() => {
@@ -762,29 +763,6 @@ export default function Upload() {
               />
             </div>
 
-            {/* Live Price Preview */}
-            <div
-              style={{
-                background: "var(--brand-light)",
-                borderRadius: 8,
-                padding: "14px 16px",
-                marginBottom: 16,
-              }}
-            >
-              <div className="flex-between">
-                <span style={{ fontWeight: 600 }}>Estimated Total</span>
-                <span
-                  style={{
-                    fontWeight: 700,
-                    fontSize: "1.2rem",
-                    color: "var(--brand)",
-                  }}
-                >
-                  ₹{estimatedPrice}
-                </span>
-              </div>
-            </div>
-
             <div className="card-actions">
               <button className="btn btn-gray" onClick={() => setStep(0)}>
                 ← Back
@@ -879,7 +857,20 @@ export default function Upload() {
                       </div>
                     </div>
 
-                    {waitInfo && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                      <div
+                        style={{
+                          background: "var(--brand-light)",
+                          color: "var(--brand)",
+                          padding: "6px 10px",
+                          borderRadius: "8px",
+                          textAlign: "right",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.75rem" }}>Estimated total</div>
+                        <strong>₹{getEstimatedPrice(v)}</strong>
+                      </div>
                       <div
                         style={{
                           background: "#f0fdf4",
@@ -888,12 +879,14 @@ export default function Upload() {
                           borderRadius: "8px",
                           fontWeight: 600,
                           fontSize: "0.85rem",
+                          textAlign: "right",
                           whiteSpace: "nowrap",
                         }}
                       >
-                        ~{waitInfo.estimated_wait_minutes} mins
+                        <div style={{ fontSize: "0.75rem" }}>Ready in</div>
+                        {waitInfo ? `~${waitInfo.estimated_wait_minutes} mins` : "Estimate unavailable"}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {waitInfo && (
