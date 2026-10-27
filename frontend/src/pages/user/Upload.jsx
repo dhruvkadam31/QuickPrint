@@ -108,8 +108,9 @@ export default function Upload() {
       const sheetsPerCopy = Math.ceil(pages / pagesPerSheet) || 0;
       const copies = cfg.quantity || 1;
       const rate = cfg.color === "Color"
-        ? vendor?.colorPricePerPage ?? 5
-        : vendor?.bwPricePerPage ?? 1.5;
+        ? vendor?.colorPricePerPage
+        : vendor?.bwPricePerPage;
+      const validRate = Number.isFinite(rate) && rate > 0;
 
       return {
         name: processedFiles[index]?.originalName || `Document ${index + 1}`,
@@ -118,13 +119,16 @@ export default function Upload() {
         sheetsPerCopy,
         copies,
         color: cfg.color || "B&W",
-        rate,
-        total: Math.round(sheetsPerCopy * copies * rate * 100) / 100,
+        rate: validRate ? rate : null,
+        total: validRate ? Math.round(sheetsPerCopy * copies * rate * 100) / 100 : null,
       };
     });
 
-  const getEstimatedPrice = (vendor) =>
-    +getPriceBreakdown(vendor).reduce((total, item) => total + item.total, 0).toFixed(2);
+  const getEstimatedPrice = (vendor) => {
+    const breakdown = getPriceBreakdown(vendor);
+    if (breakdown.some((item) => item.total === null)) return null;
+    return +breakdown.reduce((total, item) => total + item.total, 0).toFixed(2);
+  };
 
   const estimatedPrice = getEstimatedPrice(selectedVendor);
 
@@ -826,14 +830,20 @@ export default function Upload() {
 
             {vendors.map((v) => {
               const waitInfo = waitTimeData[v._id];
+              const vendorPrice = getEstimatedPrice(v);
+              const canEstimatePrice = vendorPrice !== null;
 
               return (
                 <div
                   key={v._id}
                   className="order-item"
-                  onClick={() => setSelectedVendor(v)}
+                  onClick={() => {
+                    if (canEstimatePrice) setSelectedVendor(v);
+                  }}
+                  aria-disabled={!canEstimatePrice}
                   style={{
-                    cursor: "pointer",
+                    cursor: canEstimatePrice ? "pointer" : "not-allowed",
+                    opacity: canEstimatePrice ? 1 : 0.7,
                     borderColor:
                       selectedVendor?._id === v._id
                         ? "var(--brand)"
@@ -868,7 +878,7 @@ export default function Upload() {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-                      <button
+                      {canEstimatePrice ? <button
                         type="button"
                         aria-expanded={expandedPriceVendorId === v._id}
                         aria-controls={`price-breakdown-${v._id}`}
@@ -889,11 +899,25 @@ export default function Upload() {
                         }}
                       >
                         <div style={{ fontSize: "0.75rem" }}>Estimated total</div>
-                        <strong>₹{getEstimatedPrice(v)}</strong>
+                        <strong>₹{vendorPrice.toFixed(2)}</strong>
                         <div style={{ fontSize: "0.72rem", textDecoration: "underline" }}>
                           {expandedPriceVendorId === v._id ? "Hide breakdown" : "View breakdown"}
                         </div>
-                      </button>
+                      </button> : (
+                        <div
+                          style={{
+                            background: "var(--gray-100)",
+                            color: "var(--gray-600)",
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            textAlign: "right",
+                            whiteSpace: "nowrap",
+                            fontSize: "0.82rem",
+                          }}
+                        >
+                          Vendor pricing unavailable
+                        </div>
+                      )}
                       <div
                         style={{
                           background: "#f0fdf4",
@@ -912,7 +936,7 @@ export default function Upload() {
                     </div>
                   </div>
 
-                  {expandedPriceVendorId === v._id && (
+                  {canEstimatePrice && expandedPriceVendorId === v._id && (
                     <div
                       id={`price-breakdown-${v._id}`}
                       onClick={(event) => event.stopPropagation()}
@@ -946,8 +970,13 @@ export default function Upload() {
                         </div>
                       ))}
                       <div style={{ marginTop: 8, color: "var(--gray-500)" }}>
-                        Sheets per copy are rounded up. The estimate uses this vendor’s rate for each file’s selected print color.
+                        Sheets per copy are rounded up. The estimate uses this vendor’s configured rate for each file’s selected print color.
                       </div>
+                    </div>
+                  )}
+                  {!canEstimatePrice && (
+                    <div style={{ fontSize: "0.82rem", color: "var(--gray-500)" }}>
+                      This shop has not provided a valid rate for the selected print type.
                     </div>
                   )}
 
@@ -984,7 +1013,7 @@ export default function Upload() {
               <button
                 className="btn btn-primary"
                 style={{ flex: 1 }}
-                disabled={!selectedVendor}
+                disabled={!selectedVendor || estimatedPrice === null}
                 onClick={() => setStep(3)}
               >
                 Proceed →
@@ -1034,7 +1063,7 @@ export default function Upload() {
                     color: "var(--brand)",
                   }}
                 >
-                  ₹{estimatedPrice}
+                  {estimatedPrice === null ? "Unavailable" : `₹${estimatedPrice.toFixed(2)}`}
                 </span>
               </div>
             </div>
@@ -1173,9 +1202,9 @@ export default function Upload() {
                 className="btn btn-primary"
                 style={{ flex: 1 }}
                 onClick={handlePayment}
-                disabled={!isChecked}
+                disabled={!isChecked || estimatedPrice === null}
               >
-                Pay ₹{estimatedPrice} & Place Order
+                {estimatedPrice === null ? "Price unavailable" : `Pay ₹${estimatedPrice.toFixed(2)} & Place Order`}
               </button>
             </div>
           </div>
